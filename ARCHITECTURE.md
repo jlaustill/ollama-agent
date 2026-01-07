@@ -36,10 +36,16 @@
 - Confirmation wrappers gave users control without being annoying
 - **Keep:** All safety guards, expand to more tools
 
-**Mode-Based Execution**
-- Planning mode (structure) vs. Executing mode (implementation) is a clear separation
-- TUI with split panes (chat + plan) provided excellent visibility
-- **Keep:** Mode concept, TUI approach, real-time updates
+**Terminal UI Approach**
+- v1 split panes were confusing in practice
+- v1 boxed/bordered layout felt cluttered
+- **v2 Change:** Single chat view, raw markdown output
+  - Plan printed at start like `cat plan.md` (raw markdown, no boxes)
+  - User scrolls up to review plan and chat history
+  - Input box fixed at bottom (standard terminal UX)
+  - Update plan via chat ("update task 3") OR `/editPlan` command (opens nano/editor)
+- **Keep:** Real-time updates, streaming output
+- **Discard:** Split-screen, mode switching, box borders
 
 **Factory Pattern for Tools**
 - Easy to add new tools without touching core agent
@@ -338,15 +344,16 @@ simple-agent/
 │   │   ├── tui/                    # Terminal UI (Ink/React)
 │   │   │   ├── App.tsx             # Main TUI component
 │   │   │   ├── components/
-│   │   │   │   ├── PlanPanel.tsx   # Right pane: plan visualization
-│   │   │   │   ├── ChatPanel.tsx   # Left pane: conversation
-│   │   │   │   ├── InputBox.tsx    # Bottom: user input
-│   │   │   │   └── StatusBar.tsx   # Status + mode display
+│   │   │   │   ├── ChatView.tsx    # Scrolling chat + plan history
+│   │   │   │   ├── InputBox.tsx    # Fixed bottom input box
+│   │   │   │   ├── StatusBar.tsx   # Top: agent status + spinner
+│   │   │   │   └── MarkdownOutput.tsx # Raw markdown rendering
 │   │   │   ├── hooks/              # Custom React hooks
-│   │   │   │   └── useAgentState.ts # Agent state management
-│   │   │   └── theme.ts            # Colors, styling
+│   │   │   │   ├── useAgentState.ts # Agent state management
+│   │   │   │   └── useScroll.ts    # Scroll position management
+│   │   │   └── theme.ts            # Colors, styling (no boxes)
 │   │   ├── cli/                    # Command-line interface
-│   │   │   ├── commands.ts         # Commander.js setup
+│   │   │   ├── commands.ts         # Yargs command definitions
 │   │   │   ├── interactive.ts      # Interactive mode handler
 │   │   │   ├── autonomous.ts       # Autonomous mode handler
 │   │   │   └── plan.ts             # Plan mode handler
@@ -500,11 +507,13 @@ simple-agent/
 **Purpose:** User interaction, rendering, CLI parsing
 
 **Responsibilities:**
-- Capture user input (keyboard, commands)
-- Render output (TUI panels, terminal output)
+- Capture user input (keyboard, commands, slash commands)
+- Render output (scrolling chat, raw markdown, no boxes)
 - Format data for display (plans, progress, errors)
-- Parse CLI arguments 
+- Parse CLI arguments
+- Handle scroll position (user can scroll up to see history)
 - Provide progress callbacks to domain layer
+- Handle `/editPlan` command (opens editor)
 
 **What It Does NOT Do:**
 - ❌ Business logic (plan validation, tool execution)
@@ -513,16 +522,27 @@ simple-agent/
 
 **Example:**
 ```typescript
-// ✅ GOOD: Display layer (Ink/React component)
+// ✅ GOOD: Display layer (simple scrolling chat)
 import { Box, Text } from 'ink';
 import React from 'react';
 
-const App: React.FC<{ plan: Plan; onInput: (input: string) => void }> = ({ plan, onInput }) => {
-  const markdown = formatPlanAsMarkdown(plan); // Formatting only
+const App: React.FC<{
+  messages: Message[];
+  agentStatus: AgentState;
+  onInput: (input: string) => void;
+}> = ({ messages, agentStatus, onInput }) => {
+  // Pure formatting - no business logic
+  const formattedMessages = formatMessagesAsMarkdown(messages);
 
   return (
     <Box flexDirection="column">
-      <PlanPanel content={markdown} />
+      {/* Top status bar */}
+      <StatusBar status={agentStatus} />
+
+      {/* Scrolling chat area (plan + conversation) */}
+      <ChatView messages={formattedMessages} />
+
+      {/* Fixed bottom input */}
       <InputBox onSubmit={onInput} />
     </Box>
   );
@@ -535,9 +555,133 @@ const App: React.FC<{ plan: Plan }> = ({ plan }) => {
     plan.tasks.push({ description: 'Default task', status: 'pending' });
   }
 
-  return <PlanPanel content={formatPlan(plan)} />;
+  return <ChatView content={formatPlan(plan)} />;
 };
 ```
+
+#### 5.1.1 Simple Scrolling UX
+
+**Problems in v1:**
+- Split-screen panes were confusing (too much competing info)
+- Box borders felt cluttered and noisy
+- Mode switching added unnecessary complexity
+
+**v2 Solution: Single scrolling chat view (like a terminal)**
+
+**Example Terminal Output:**
+```
+Status: Idle ⏸️
+
+# Project Plan: Build REST API
+
+## Goal
+Create user authentication API with JWT tokens
+
+## Tasks
+- [x] Setup Express + TypeScript
+- [x] Create User model
+- [ ] Implement /register endpoint
+- [ ] Implement /login endpoint
+- [ ] Add JWT middleware
+
+## Architecture Decisions
+- Using bcrypt for password hashing
+- JWT tokens with 24h expiry
+
+────────────────────────────────────────────────
+
+User: Implement the /register endpoint
+
+Agent: I'll create the registration endpoint with validation and password hashing.
+
+🔧 read_file("src/models/User.ts")
+   Reading User model schema...
+
+🔧 write_file("src/routes/auth.ts")
+   Creating authentication routes...
+
+Agent: ✓ Created /register endpoint with:
+- Email/password validation
+- Bcrypt password hashing
+- JWT token generation
+
+Updated plan: Task marked complete ✓
+
+────────────────────────────────────────────────
+> _
+```
+
+**Key UX Features:**
+
+**1. Raw Markdown Output**
+- Plan printed at start like `cat plan.md`
+- No boxes, no borders, just clean markdown
+- Easy to read, familiar formatting
+
+**2. Scrolling History**
+- User scrolls up to see plan and old messages
+- Input box stays fixed at bottom (standard terminal behavior)
+- Infinite scroll buffer (configurable max lines)
+
+**3. Updating the Plan**
+
+**Via Natural Language:**
+```
+> Hey, can you update task 3 to resolved?
+
+Agent: Marking "Implement /register endpoint" as complete...
+Updated plan ✓
+```
+
+**Via `/editPlan` Command:**
+```
+> /editPlan
+
+[Opens plan.md in nano (or $EDITOR)]
+[User edits, saves, exits]
+Plan reloaded ✓
+```
+
+**Implementation:**
+```typescript
+// Display layer handles slash commands, delegates to domain
+const InputBox: React.FC<{ onSubmit: (input: string) => void }> = ({ onSubmit }) => {
+  const handleSubmit = (input: string) => {
+    // Display just captures input, domain handles command logic
+    onSubmit(input);
+  };
+
+  return <TextInput onSubmit={handleSubmit} placeholder="Type message or /editPlan..." />;
+};
+
+// Domain layer handles /editPlan command
+async function handleUserInput(input: string, context: ExecutionContext): Promise<void> {
+  if (input === '/editPlan') {
+    const editor = process.env.EDITOR || 'nano';
+    // Use spawn for interactive editor (not execFile - needs TTY)
+    const child = spawn(editor, ['plan.md'], { stdio: 'inherit' });
+
+    await new Promise((resolve) => child.on('close', resolve));
+
+    // Reload plan after edit
+    context.planManager.reload();
+    context.callbacks.onPlanUpdated(context.planManager.plan);
+  } else {
+    // Regular message processing
+    await context.orchestrator.processMessage(input, context);
+  }
+}
+```
+
+**Benefits:**
+- ✅ No mode switching - simpler mental model
+- ✅ Natural chat interface everyone understands
+- ✅ Scroll up to see history (standard terminal UX)
+- ✅ Raw markdown is clean and readable
+- ✅ `/editPlan` gives power users direct file access
+- ✅ Fixed input box is familiar (like bash, zsh, fish)
+
+---
 
 ### 5.2 Domain Layer (`src/domain/`)
 
@@ -609,6 +753,16 @@ class AgentOrchestrator {
 - ❌ Business rules (plan validation, tool approval logic)
 - ❌ Orchestration (agent loops, context building)
 - ❌ UI concerns (formatting, rendering)
+
+**Why This Separation Matters:**
+
+**Multi-Provider Support:** We WILL support multiple local LLM providers (Ollama, Llama.cpp, LocalAI). Clean data layer separation means:
+- Define abstract `LLMClient` interface in domain layer
+- Implement concrete adapters (OllamaClient, LlamaCppClient, LocalAIClient) in data layer
+- Swap providers via configuration without touching orchestrator or UI
+- Example: User can run `--provider llama.cpp` to switch from Ollama to Llama.cpp without code changes
+
+**Future-Proofing:** As new local LLM runtimes emerge, we can add adapters without refactoring business logic.
 
 **Example:**
 ```typescript
@@ -1127,12 +1281,13 @@ npm install \
   axios \
   ink \
   react \
-  commander \
+  yargs \
   vectra \
   better-sqlite3
 
 npm install -D \
-  @types/react
+  @types/react \
+  @types/yargs
 ```
 
 **Note on HTTP Client:** This project uses **Axios** as the standard HTTP client for all RESTful API calls. Axios is preferred over native `fetch` for:
@@ -1148,6 +1303,60 @@ npm install -D \
 - **Modern patterns:** Functional components, custom hooks, context API
 - **Testing:** Easier to test with React Testing Library
 - **Composability:** Clean component composition and reusability
+
+**Note on CLI Parsing:** This project uses **Yargs** for command-line argument parsing. Yargs is preferred over Commander.js for:
+- **Excellent TypeScript support:** Strong type inference for options and arguments
+- **Rich validation:** Built-in validators (`.choices()`, `.number()`, `.string()`, custom validators)
+- **Auto-generated help:** Professional-looking, customizable help text
+- **Powerful features:** Middleware, command aliases, positional arguments with validation
+- **Type-safe commands:** Full TypeScript support for command handlers with inferred argument types
+
+**Example Yargs Command:**
+```typescript
+import yargs from 'yargs';
+import { hideBin } from 'yargs/helpers';
+
+interface PlanArgs {
+  goal: string;
+  model?: string;
+  autonomous: boolean;
+}
+
+const cli = yargs(hideBin(process.argv))
+  .command<PlanArgs>(
+    'plan <goal>',
+    'Create a new plan',
+    (yargs) => {
+      return yargs
+        .positional('goal', {
+          type: 'string',
+          describe: 'Goal to accomplish',
+          demandOption: true,
+        })
+        .option('model', {
+          type: 'string',
+          describe: 'LLM model to use',
+          default: 'qwen2.5-coder:7b',
+          choices: ['qwen2.5-coder:7b', 'qwen2.5-coder:32b', 'llama3.1:8b'],
+        })
+        .option('autonomous', {
+          type: 'boolean',
+          describe: 'Run in autonomous mode',
+          default: false,
+        });
+    },
+    (argv) => {
+      // argv is fully typed as PlanArgs!
+      console.log(`Planning: ${argv.goal}`);
+      console.log(`Model: ${argv.model}`);
+      console.log(`Autonomous: ${argv.autonomous}`);
+    }
+  )
+  .strict()
+  .demandCommand(1, 'You need at least one command')
+  .help()
+  .parse();
+```
 
 **Step 4: Configure TypeScript (`tsconfig.json`)**
 ```json
@@ -1640,25 +1849,204 @@ v1 can be referenced in the /simple-agent directory, but this is a net new proje
 
 ### 11.1 Unresolved Design Questions
 
-**Q1: Should we support multiple LLM providers (OpenAI, Anthropic)?**
-- **Current:** Ollama-only
-- **Consideration:** Abstract `LLMClient` interface, implement multiple adapters
-- **Decision:** Start with Ollama, abstract later if needed
+**Q1: Should we support multiple LLM providers?**
+- **Decision:** ✅ **YES - Multiple LOCAL providers only**
+- **Local-only requirement:** MUST work offline (after models pulled) - NO cloud APIs ever
+- **Planned support:**
+  - Phase 1: Ollama only (MVP)
+  - Future: Llama.cpp, LocalAI, and other local providers
+  - NEVER: OpenAI, Anthropic, or any cloud APIs
+- **Architecture impact:** This is a KEY reason for clean data layer separation
+  - Abstract `LLMClient` interface in domain layer
+  - Concrete implementations (OllamaClient, LlamaCppClient, LocalAIClient) in data layer
+  - Swap providers without touching orchestrator or UI code
+- **Implementation:** Start with Ollama, add adapter pattern when second provider is needed
 
 **Q2: How to handle streaming in the orchestrator loop?**
-- **Current:** Batch responses only
-- **Consideration:** Need to parse incomplete JSON during streaming
-- **Decision:** Phase 4 enhancement, batch for now
+- **Decision:** Implement **Hybrid Streaming** in Phase 4
+- **Rationale:** Stream thinking/reasoning for UX, buffer tool calls for structured execution
+- **Why:** Tool execution (file I/O, shell) dominates latency, not token generation. Streaming is primarily UX improvement.
+
+**Hybrid Streaming Pattern:**
+```
+1. Stream "thinking" content → Display immediately in TUI
+2. Buffer "tool_calls" JSON → Parse when complete
+3. Execute tools → After full response received
+```
+
+**Technical Approach:**
+- Ollama streams JSON Lines (NDJSON format, one object per line)
+- Parse each line as it arrives:
+  - `{"thinking": "text"}` → Stream to ChatView (execute mode)
+  - `{"tool_calls": [...]}` → Accumulate in buffer
+  - `{"done": true}` → Parse buffered tool calls, execute
+- Ink/React updates UI incrementally as thinking streams in
+
+**Example Stream:**
+```json
+{"thinking": "I need to check the file structure first..."}
+{"thinking": "Let me read the package.json to understand dependencies..."}
+{"tool_calls": [{"name": "read_file", "args": {"path": "package.json"}}]}
+{"done": true}
+```
+
+**Benefits:**
+- ✅ Immediate feedback (user sees agent "thinking")
+- ✅ Structured tool execution (no partial JSON execution)
+- ✅ Works with all local LLM providers (NDJSON is standard)
+- ✅ Minimal orchestrator changes (still executes complete tool calls)
+
+**Implementation:** Start with batch (Phase 1-3), add streaming in Phase 4 after core loop is stable
+
+**Type Definitions for Streaming:**
+```typescript
+type ChatChunk =
+  | { type: 'thinking'; content: string }
+  | { type: 'tool_calls'; calls: ToolCall[] }
+  | { type: 'done'; done: true };
+
+interface ToolCall {
+  name: string;
+  args: Record<string, unknown>;
+}
+```
+
+**Data Layer:** `OllamaClient.chatStream()` already implements NDJSON parsing (see section 7.3)
+**Domain Layer:** `AgentOrchestrator` accumulates chunks, executes tools when `done: true` received
+**Display Layer:** `App.tsx` subscribes to thinking chunks, updates ChatView in real-time (when in execute mode)
 
 **Q3: Should tools be async iterators (for progress updates)?**
-- **Current:** Tools return single result
-- **Example:** `shell_exec` could yield partial stdout
-- **Decision:** Nice-to-have, not MVP
+- **Decision:** ✅ **YES - Hybrid approach for long-running tools**
+- **Rationale:** Long-running tools (shell_exec, file_search) need progress feedback; fast tools (read_file) don't
+- **What this is:** Tool OUTPUT streaming (not LLM streaming - that's Q2)
+
+**The Problem:**
+```typescript
+// Current: Batch tools - no feedback until complete
+const result = await shellExec({ command: "npm test" });
+// User sees NOTHING for 30 seconds while tests run
+// Then sees entire output at once
+// Feels frozen/broken during execution
+```
+
+**Proposed: Streaming Tools:**
+```typescript
+// Long-running tools yield progress updates
+for await (const chunk of shellExec({ command: "npm test" })) {
+  // chunk = { type: 'stdout', data: 'Running tests...\n' }
+  // chunk = { type: 'stdout', data: '✓ test 1 passed\n' }
+  // chunk = { type: 'stdout', data: '✓ test 2 passed\n' }
+  // chunk = { type: 'exit', code: 0 }
+}
+// User sees real-time output, knows it's working
+```
+
+**Hybrid Approach - Categorize by Latency:**
+
+**Stream These (>2s typical latency):**
+- `shell_exec` - Commands run for seconds/minutes, need stdout/stderr streaming
+- `file_search` - Searching thousands of files, yield matches as found
+- `git_clone` - Network operations with progress indicators
+
+**Don't Stream These (<100ms typical latency):**
+- `read_file` - Instant for normal files
+- `write_file` - Instant write + sync
+- `list_directory` - Fast enough for batch
+
+**Type Definitions:**
+```typescript
+// Tools can return either sync results OR streaming progress
+type ToolExecutor<T> =
+  | (() => Promise<T>)                          // Fast tools
+  | (() => AsyncIterator<ToolProgress<T>>);     // Slow tools
+
+type ToolProgress<T> =
+  | { type: 'progress'; data: string }          // Partial output
+  | { type: 'result'; data: T; done: true };    // Final result
+
+// Example: shell_exec streams stdout
+type ShellProgress =
+  | { type: 'stdout'; data: string }
+  | { type: 'stderr'; data: string }
+  | { type: 'exit'; code: number; done: true };
+```
+
+**Benefits:**
+- ✅ Users see long-running tools making progress
+- ✅ Can cancel tools that are going in wrong direction
+- ✅ Better UX for autonomous mode (not stuck waiting)
+- ✅ Simple tools stay simple (no streaming overhead)
+
+**Implementation Complexity:**
+- Domain: `AgentOrchestrator` handles both sync and async tool results
+- Display: `App.tsx` shows streaming output in real-time
+- Data: Only implement streaming for slow tools (`shell_exec`, `file_search`)
+
+**Timeline:** Phase 3 (after basic tool calling works in Phase 2)
 
 **Q4: How to handle plan conflicts (concurrent edits)?**
-- **Current:** Last write wins
-- **Consideration:** Operational transform, CRDTs, or version locking
-- **Decision:** Not a problem for single-agent, defer
+- **Decision:** ✅ **Last write wins - plan.md is TUI-managed only**
+- **Rationale:** Plan file is generated/managed by TUI, not for external editing
+- **User contract:** Edit plan through TUI only; external edits will be lost
+
+**Design Principle:**
+```
+plan.md is OUTPUT, not INPUT
+- Generated by agent/TUI
+- Users can VIEW it (it's markdown)
+- Users CANNOT reliably edit it externally
+- Changes made outside TUI will be overwritten
+```
+
+**Why This Is Simple:**
+
+```typescript
+// Last write wins - no conflict detection needed
+async savePlan(plan: Plan): Promise<void> {
+  await fs.writeFile('plan.md', serialize(plan));
+  // TUI owns this file, external edits are unsupported
+}
+```
+
+**Benefits:**
+- ✅ Simple implementation (no locking, no file watching)
+- ✅ No conflict resolution UI needed
+- ✅ Clear ownership: TUI manages plan.md
+- ✅ Users can still read/view plan.md for reference
+
+**Documentation:**
+```markdown
+# plan.md Usage
+
+⚠️ **IMPORTANT:** plan.md is managed by the agent TUI.
+
+✅ You can:
+- View plan.md in any editor
+- Copy content for reference
+- Version control it with git
+
+❌ Do not:
+- Edit plan.md directly (changes will be lost)
+- Open multiple agent sessions on same plan
+- Sync plan.md across machines while agent is running
+
+To modify the plan, use TUI commands:
+- Add tasks, mark complete, etc.
+```
+
+**Edge Case: Multiple Sessions**
+If user runs two agent sessions in same directory:
+- Both will write to plan.md → last write wins
+- This is **unsupported use case**
+- Document: "One agent session per plan.md"
+
+**Future: Multi-Agent (Only if needed)**
+If we ever support true multi-agent collaboration:
+- Then consider OT/CRDTs for conflict resolution
+- Requires distributed consensus, much complexity
+- Not needed for MVP or single-agent use
+
+**Decision:** Keep it simple. Plan.md is TUI-owned output. No conflict detection needed.
 
 ### 11.2 Future Enhancements
 
@@ -1683,8 +2071,9 @@ v1 can be referenced in the /simple-agent directory, but this is a net new proje
 - Timeline: Post-MVP
 
 **Cloud Deployment:**
-- Run agent as a service (shared Ollama instance)
+- Run agent on cloud VM with LOCAL Ollama instance (NOT cloud LLM APIs)
 - Requires: Multi-tenancy, authentication, resource limits
+- Note: Still 100% local processing, just hosted on cloud infrastructure
 - Timeline: Far future
 
 ---
@@ -1711,6 +2100,7 @@ v1 can be referenced in the /simple-agent directory, but this is a net new proje
 **Technologies:**
 - [TypeScript](https://www.typescriptlang.org/)
 - [Axios](https://axios-http.com/) - HTTP client
+- [Yargs](https://yargs.js.org/) - CLI argument parser
 - [Ollama](https://ollama.ai/)
 - [Ink](https://github.com/vadimdemedes/ink) - React for CLIs
 - [React](https://react.dev/) - UI library (used by Ink)

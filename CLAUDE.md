@@ -6,7 +6,27 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is a v2 rewrite of an LLM-powered autonomous agent system that uses plans (markdown documents) as primary context instead of full conversation history. The agent can execute tasks by calling tools, managing a structured plan, and maintaining state through a terminal UI.
 
-**Key Innovation:** Plan-based context management that enables long-running projects without context window explosion.
+**Key Innovations:**
+- **Plan-based context management:** Enables long-running projects without context window explosion
+- **Simple scrolling UX:** Single chat view with plan printed at start (like `cat plan.md`), no boxes/borders, scroll up for history - learned from v1's confusing split-screen
+
+## 🔒 Core Principle: 100% Local Operation
+
+**This system MUST be purely local and work without internet connection** (after models are downloaded).
+
+- ❌ **NO cloud LLM providers** (OpenAI, Anthropic, etc.) - EVER
+- ✅ **Multiple local providers supported** - Ollama (Phase 1), Llama.cpp, LocalAI (future)
+- ✅ **Fully offline-capable** once models are pulled
+- ✅ **No external API dependencies** for core functionality
+
+**Why this matters:**
+- **Privacy:** All data stays on your machine
+- **Cost:** No API fees, unlimited usage
+- **Control:** No rate limits or service outages
+- **Security:** No data leaving your environment
+- **Flexibility:** Choose the best local runtime for your hardware/models
+
+**Architecture Benefit:** Clean data layer separation enables adding new local providers without refactoring business logic or UI.
 
 ## Architecture Principles
 
@@ -25,6 +45,13 @@ Data Layer (src/data)        - Ollama API, file I/O, databases
 - Domain → Data only (one-way)
 - Data has NO knowledge of Domain or Display
 - NO circular dependencies ever
+
+**Why This Matters - Multi-Provider Future:**
+This clean separation enables supporting multiple local LLM providers (Ollama, Llama.cpp, LocalAI) without refactoring:
+- Abstract `LLMClient` interface in domain layer
+- Concrete providers (OllamaClient, LlamaCppClient) in data layer
+- Swap providers via config: `--provider llama.cpp`
+- Zero changes to orchestrator or chat UI code
 
 ### Type Safety Requirements
 
@@ -164,9 +191,9 @@ function formatTaskList(tasks: Task[]): string {
 
 **Does:**
 - Capture user input (TUI, CLI)
-- Render output (Blessed panels, terminal)
+- Render output (Ink/React components, terminal)
 - Format data for display
-- Parse CLI arguments (Commander.js)
+- Parse CLI arguments (Yargs)
 
 **Does NOT:**
 - Business logic (plan validation, tool execution)
@@ -320,16 +347,29 @@ describe('AgentOrchestrator', () => {
 - **Runtime:** Node.js with Volta version management
 - **Language:** TypeScript (strict mode)
 - **HTTP Client:** Axios (all RESTful API calls)
+- **UI Framework:** React (with Ink for terminal rendering)
+- **TUI Library:** Ink (React for CLIs)
+- **CLI Parser:** Yargs (command-line argument parsing)
 - **LLM Backend:** Ollama (local models)
 - **Vector DB:** Vectra (local embeddings)
 - **Session Store:** SQLite
-- **TUI:** Blessed (terminal UI library)
-- **CLI:** Commander.js
 - **Testing:** Vitest
 - **Linting:** ESLint (Airbnb config)
 - **Formatting:** Prettier
 
-**Note:** Axios is the standard HTTP client for all API communications. It provides automatic JSON transformation, built-in timeout support, better error handling, and request/response interceptors.
+**Note on HTTP Client:** Axios is the standard HTTP client for all API communications. It provides automatic JSON transformation, built-in timeout support, better error handling, and request/response interceptors.
+
+**Note on Terminal UI:** Ink (React for CLIs) is used for building the terminal interface. Benefits include:
+- Familiar React patterns (components, hooks, context)
+- Strong TypeScript support
+- Easy testing with React Testing Library
+- Better composability and reusability
+
+**Note on CLI Parsing:** Yargs is used for command-line argument parsing. Benefits include:
+- Excellent TypeScript support with strong type inference
+- Rich built-in validation (choices, types, custom validators)
+- Auto-generated, professional help text
+- Type-safe command handlers
 
 ## Safety & Performance
 
@@ -427,8 +467,11 @@ See ARCHITECTURE.md Section 9 for full migration strategy.
 - **Architecture Document:** `ARCHITECTURE.md` - Complete design specification
 - **v1 Codebase:** Reference for safety mechanisms and tool implementations
 - **Ollama API:** https://ollama.ai/
+- **Axios:** https://axios-http.com/
+- **Yargs:** https://yargs.js.org/
+- **Ink:** https://github.com/vadimdemedes/ink
+- **React:** https://react.dev/
 - **Vectra:** https://github.com/microsoft/vectra
-- **Blessed:** https://github.com/chjj/blessed
 
 ## Getting Started
 
