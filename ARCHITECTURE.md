@@ -32,7 +32,7 @@
 - **Keep:** The core plan concept, markdown persistence, task tracking
 
 **Safety-First Tool Design**
-- Protected files (`.env`, `package.json`), command blacklists, size limits prevented disasters
+- Protected files (`.env`, `package.json`), command whitelists, size limits prevented disasters
 - Confirmation wrappers gave users control without being annoying
 - **Keep:** All safety guards, expand to more tools
 
@@ -112,8 +112,8 @@
 ```
 ┌─────────────────────────────────────────────┐
 │          DISPLAY LAYER (src/display)        │
-│  - TUI rendering (Blessed)                  │
-│  - CLI parsing (Commander)                  │
+│  - TUI rendering                │
+│  - CLI parsing                 │
 │  - User interaction                         │
 │  - Progress visualization                   │
 │  ↓ calls                                    │
@@ -188,7 +188,6 @@ switch (mode.type) {
 ### Principle 4: **Testability By Design**
 
 - Pure functions wherever possible (no side effects)
-- Dependencies injected, not created
 - Small, focused modules (< 200 lines)
 - Clear input/output contracts
 - Mock-friendly interfaces
@@ -203,7 +202,7 @@ switch (mode.type) {
 ### Principle 6: **Safety Without Friction**
 
 - Dangerous operations require confirmation (but queue them, don't block)
-- Protected files, command blacklists (expand from v1)
+- Protected files, command whitelists (motivated from v1)
 - Size limits, timeouts (carry forward)
 - Clear error messages with recovery suggestions
 
@@ -239,7 +238,7 @@ npx husky init
 │                                                                  │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐  │
 │  │ TUI Manager  │  │ CLI Parser   │  │ Progress Renderer    │  │
-│  │ (Blessed)    │  │ (Commander)  │  │ (Formatters)         │  │
+│  │              │  │              │  │ (Formatters)         │  │
 │  └──────┬───────┘  └──────┬───────┘  └──────────┬───────────┘  │
 │         │                  │                     │              │
 └─────────┼──────────────────┼─────────────────────┼──────────────┘
@@ -330,18 +329,21 @@ npx husky init
 
 ---
 
-## 4. Directory Structure
+## 4. Directory Structure (example, subject to change)
 
 ```
 simple-agent/
 ├── src/
 │   ├── display/                    # DISPLAY LAYER
-│   │   ├── tui/                    # Terminal UI (Blessed)
-│   │   │   ├── TUIManager.ts       # Main TUI orchestrator
-│   │   │   ├── PlanPanel.ts        # Right pane: plan visualization
-│   │   │   ├── ChatPanel.ts        # Left pane: conversation
-│   │   │   ├── InputBox.ts         # Bottom: user input
-│   │   │   ├── StatusBar.ts        # Status + mode display
+│   │   ├── tui/                    # Terminal UI (Ink/React)
+│   │   │   ├── App.tsx             # Main TUI component
+│   │   │   ├── components/
+│   │   │   │   ├── PlanPanel.tsx   # Right pane: plan visualization
+│   │   │   │   ├── ChatPanel.tsx   # Left pane: conversation
+│   │   │   │   ├── InputBox.tsx    # Bottom: user input
+│   │   │   │   └── StatusBar.tsx   # Status + mode display
+│   │   │   ├── hooks/              # Custom React hooks
+│   │   │   │   └── useAgentState.ts # Agent state management
 │   │   │   └── theme.ts            # Colors, styling
 │   │   ├── cli/                    # Command-line interface
 │   │   │   ├── commands.ts         # Commander.js setup
@@ -501,7 +503,7 @@ simple-agent/
 - Capture user input (keyboard, commands)
 - Render output (TUI panels, terminal output)
 - Format data for display (plans, progress, errors)
-- Parse CLI arguments (Commander.js)
+- Parse CLI arguments 
 - Provide progress callbacks to domain layer
 
 **What It Does NOT Do:**
@@ -511,29 +513,30 @@ simple-agent/
 
 **Example:**
 ```typescript
-// ✅ GOOD: Display layer
-class TUIManager {
-  renderPlan(plan: Plan): void {
-    const markdown = formatPlanAsMarkdown(plan); // Formatting only
-    this.planPanel.setContent(markdown);
-    this.screen.render();
-  }
+// ✅ GOOD: Display layer (Ink/React component)
+import { Box, Text } from 'ink';
+import React from 'react';
 
-  onUserInput(callback: (input: string) => void): void {
-    this.inputBox.on('submit', callback); // Delegate to domain
-  }
-}
+const App: React.FC<{ plan: Plan; onInput: (input: string) => void }> = ({ plan, onInput }) => {
+  const markdown = formatPlanAsMarkdown(plan); // Formatting only
+
+  return (
+    <Box flexDirection="column">
+      <PlanPanel content={markdown} />
+      <InputBox onSubmit={onInput} />
+    </Box>
+  );
+};
 
 // ❌ BAD: Display layer doing business logic
-class TUIManager {
-  renderPlan(plan: Plan): void {
-    // Validation belongs in domain!
-    if (plan.tasks.length === 0) {
-      plan.tasks.push({ description: 'Default task', status: 'pending' });
-    }
-    this.planPanel.setContent(formatPlan(plan));
+const App: React.FC<{ plan: Plan }> = ({ plan }) => {
+  // Validation belongs in domain!
+  if (plan.tasks.length === 0) {
+    plan.tasks.push({ description: 'Default task', status: 'pending' });
   }
-}
+
+  return <PlanPanel content={formatPlan(plan)} />;
+};
 ```
 
 ### 5.2 Domain Layer (`src/domain/`)
@@ -584,11 +587,8 @@ class AgentOrchestrator {
 class AgentOrchestrator {
   async processMessage(userMessage: string): Promise<string> {
     // Domain shouldn't know about HTTP!
-    const response = await fetch('http://localhost:11434/api/chat', {
-      method: 'POST',
-      body: JSON.stringify({...})
-    });
-    return response.json();
+    const response = await axios.post('http://localhost:11434/api/chat', {...});
+    return response.data;
   }
 }
 ```
@@ -616,18 +616,19 @@ class AgentOrchestrator {
 class OllamaClient {
   async chat(request: ChatRequest): Promise<ChatResponse> {
     try {
-      const response = await fetch(`${this.baseUrl}/api/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(request),
-      });
+      const response = await axios.post<ChatResponse>(
+        `${this.baseUrl}/api/chat`,
+        request,
+        {
+          headers: { 'Content-Type': 'application/json' },
+        }
+      );
 
-      if (!response.ok) {
-        throw new DataError(`Ollama API error: ${response.statusText}`);
-      }
-
-      return await response.json();
+      return response.data;
     } catch (error) {
+      if (axios.isAxiosError(error)) {
+        throw new DataError(`Ollama API error: ${error.response?.statusText || error.message}`, { cause: error });
+      }
       throw new DataError('Failed to call Ollama API', { cause: error });
     }
   }
@@ -641,7 +642,8 @@ class OllamaClient {
       request.model = 'qwen2.5-coder:32b';
     }
 
-    return await fetch(...);
+    const response = await axios.post(`${this.baseUrl}/api/chat`, request);
+    return response.data;
   }
 }
 ```
@@ -1024,52 +1026,48 @@ class OllamaClient {
 
   async chat(request: ChatRequest): Promise<ChatResponse> {
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+      const response = await axios.post<ChatResponse>(
+        `${this.baseUrl}/api/chat`,
+        request,
+        {
+          headers: { 'Content-Type': 'application/json' },
+          timeout: this.timeout,
+        }
+      );
 
-      const response = await fetch(`${this.baseUrl}/api/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(request),
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        throw new DataError(`Ollama API error: ${response.status} ${response.statusText}`);
-      }
-
-      return await response.json();
+      return response.data;
 
     } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
-        throw new DataError('Request timeout', { cause: error });
+      if (axios.isAxiosError(error)) {
+        if (error.code === 'ECONNABORTED') {
+          throw new DataError('Request timeout', { cause: error });
+        }
+        throw new DataError(
+          `Ollama API error: ${error.response?.status} ${error.response?.statusText || error.message}`,
+          { cause: error }
+        );
       }
       throw new DataError('Failed to call Ollama API', { cause: error });
     }
   }
 
   async *chatStream(request: ChatRequest): AsyncIterator<ChatChunk> {
-    const response = await fetch(`${this.baseUrl}/api/chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...request, stream: true }),
-    });
+    const response = await axios.post(
+      `${this.baseUrl}/api/chat`,
+      { ...request, stream: true },
+      {
+        headers: { 'Content-Type': 'application/json' },
+        responseType: 'stream',
+      }
+    );
 
-    if (!response.body) {
-      throw new DataError('No response body for streaming');
-    }
-
-    const reader = response.body.getReader();
+    const stream = response.data;
     const decoder = new TextDecoder();
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      const chunk = decoder.decode(value);
-      const lines = chunk.split('\n').filter(line => line.trim());
+    // Handle stream data events
+    for await (const chunk of stream) {
+      const text = decoder.decode(chunk);
+      const lines = text.split('\n').filter(line => line.trim());
 
       for (const line of lines) {
         try {
@@ -1083,11 +1081,10 @@ class OllamaClient {
 
   async healthCheck(): Promise<boolean> {
     try {
-      const response = await fetch(`${this.baseUrl}/api/tags`, {
-        method: 'GET',
-        signal: AbortSignal.timeout(5000), // 5s timeout for health check
+      await axios.get(`${this.baseUrl}/api/tags`, {
+        timeout: 5000, // 5s timeout for health check
       });
-      return response.ok;
+      return true;
     } catch {
       return false;
     }
@@ -1103,9 +1100,6 @@ class OllamaClient {
 
 **Step 1: Initialize Project**
 ```bash
-mkdir simple-agent-v2
-cd simple-agent-v2
-git init
 npm init -y
 ```
 
@@ -1127,7 +1121,35 @@ npm install -D \
   lint-staged
 ```
 
-**Step 3: Configure TypeScript (`tsconfig.json`)**
+**Step 3: Install Runtime Dependencies**
+```bash
+npm install \
+  axios \
+  ink \
+  react \
+  commander \
+  vectra \
+  better-sqlite3
+
+npm install -D \
+  @types/react
+```
+
+**Note on HTTP Client:** This project uses **Axios** as the standard HTTP client for all RESTful API calls. Axios is preferred over native `fetch` for:
+- Automatic JSON transformation (no need for `JSON.stringify()` or `.json()`)
+- Built-in timeout support (simpler than AbortController)
+- Automatic error throwing on non-2xx status codes
+- Request/response interceptors for logging and error handling
+- Better TypeScript support for request/response types
+
+**Note on Terminal UI:** This project uses **Ink** (React for CLIs) for building the terminal interface. Ink is preferred over Blessed for:
+- **React-based:** Familiar component model, hooks, and state management
+- **Better TypeScript support:** Strong typing for props and components
+- **Modern patterns:** Functional components, custom hooks, context API
+- **Testing:** Easier to test with React Testing Library
+- **Composability:** Clean component composition and reusability
+
+**Step 4: Configure TypeScript (`tsconfig.json`)**
 ```json
 {
   "compilerOptions": {
@@ -1158,19 +1180,13 @@ npm install -D \
 }
 ```
 
-**Step 4: Configure Prettier (`.prettierrc`)**
+**Step 5: Configure Prettier (`.prettierrc`)**
 ```json
-{
-  "semi": true,
-  "trailingComma": "es5",
-  "singleQuote": true,
-  "printWidth": 100,
-  "tabWidth": 2,
-  "useTabs": false
-}
+{}
 ```
+IMPORTANT, USE DEFAULTS, ZERO EXCEPTIONS
 
-**Step 5: Configure ESLint (`.eslintrc.json`)**
+**Step 6: Configure ESLint (`.eslintrc.json`)**
 ```json
 {
   "root": true,
@@ -1198,7 +1214,7 @@ npm install -D \
 }
 ```
 
-**Step 6: Configure Vitest (`vitest.config.ts`)**
+**Step 7: Configure Vitest (`vitest.config.ts`)**
 ```typescript
 import { defineConfig } from 'vitest/config';
 
@@ -1215,7 +1231,7 @@ export default defineConfig({
 });
 ```
 
-**Step 7: Configure Git Hooks (`package.json`)**
+**Step 8: Configure Git Hooks (`package.json`)**
 ```json
 {
   "scripts": {
@@ -1240,13 +1256,13 @@ export default defineConfig({
 }
 ```
 
-**Step 8: Initialize Husky**
+**Step 9: Initialize Husky**
 ```bash
 npx husky install
 npx husky add .husky/pre-commit "npm run precommit"
 ```
 
-**Step 9: Verify Setup**
+**Step 10: Verify Setup**
 ```bash
 # Create dummy file to test
 mkdir -p src
@@ -1545,93 +1561,7 @@ if (result.success) {
 
 ## 9. Migration Strategy
 
-### 9.1 Parallel Development Approach
-
-**DO NOT try to migrate in place. Build v2 alongside v1.**
-
-```
-simple-agent/           # Original v1 codebase
-simple-agent-v2/        # New v2 codebase (clean start)
-```
-
-**Rationale:**
-- Avoids half-broken states
-- Can compare implementations side-by-side
-- Can run v1 while developing v2
-- Can copy-paste working code snippets
-
-### 9.2 What to Port vs. Rewrite
-
-**Port Directly (90% same code):**
-- ✅ Safety guards (`safetyGuards.ts`)
-- ✅ Tool definitions (file operations, shell execution)
-- ✅ Model selection logic (`ModelSelector.ts`)
-- ✅ Plan markdown serialization (mostly)
-
-**Rewrite from Scratch:**
-- ❌ Agent orchestration (too tangled)
-- ❌ Context building (mixed with prompt engineering)
-- ❌ TUI (blessed usage, but redesign state management)
-- ❌ CLI modes (consolidate 3 modes → cleaner state machine)
-
-### 9.3 Migration Phases
-
-**Phase 1: Data Layer (Week 1)**
-- Port `OllamaClient` with tests
-- Port file system tools with tests
-- Port Vectra/SQLite adapters with tests
-- **Milestone:** All infrastructure working, 100% test coverage
-
-**Phase 2: Domain Layer (Week 2-3)**
-- Implement `ToolRegistry` from scratch
-- Implement `PlanManager` (reuse some v1 logic)
-- Implement `ContextBuilder` from scratch
-- Implement `AgentOrchestrator` from scratch
-- **Milestone:** Can execute a simple tool call loop (no UI)
-
-**Phase 3: Display Layer (Week 4)**
-- Port TUI components (refactor state management)
-- Implement CLI commands (consolidate modes)
-- Wire everything together in `index.ts`
-- **Milestone:** Full working application
-
-**Phase 4: Polish (Week 5)**
-- Add streaming support
-- Add tool batching
-- Add plan diff visualization
-- Performance optimization
-- **Milestone:** Production-ready v2
-
-### 9.4 Cutover Plan
-
-**Step 1: Feature Parity Check**
-```bash
-# v1 features
-npm run build && ./dist/index.js plan
-npm run build && ./dist/index.js run "test task"
-
-# v2 equivalents must work the same
-cd ../simple-agent-v2
-npm run build && ./dist/index.js plan
-npm run build && ./dist/index.js run "test task"
-```
-
-**Step 2: User Testing**
-- Run v2 for 1 week on real tasks
-- Document any bugs or UX regressions
-- Fix before full cutover
-
-**Step 3: Deprecate v1**
-```bash
-# Rename v1
-mv simple-agent simple-agent-v1-deprecated
-
-# Promote v2
-mv simple-agent-v2 simple-agent
-
-# Archive v1
-tar -czf simple-agent-v1-backup.tar.gz simple-agent-v1-deprecated/
-```
+v1 can be referenced in the /simple-agent directory, but this is a net new project, NOT a migration
 
 ---
 
@@ -1775,15 +1705,16 @@ tar -czf simple-agent-v1-backup.tar.gz simple-agent-v1-deprecated/
 ### 12.2 References
 
 **Existing Codebase:**
-- v1 source: `/home/linux/code/simple-agent/`
+- v1 source: `./simple-agent/`
 - Architecture review: This document
 
 **Technologies:**
 - [TypeScript](https://www.typescriptlang.org/)
+- [Axios](https://axios-http.com/) - HTTP client
 - [Ollama](https://ollama.ai/)
+- [Ink](https://github.com/vadimdemedes/ink) - React for CLIs
+- [React](https://react.dev/) - UI library (used by Ink)
 - [Vectra](https://github.com/microsoft/vectra) - Local vector DB
-- [Blessed](https://github.com/chjj/blessed) - Terminal UI
-- [Commander.js](https://github.com/tj/commander.js) - CLI framework
 - [Vitest](https://vitest.dev/) - Testing framework
 
 ### 12.3 Contributors
