@@ -637,10 +637,23 @@ Updated plan ✓
 ```
 > /editPlan
 
+⚠️  Agent pauses execution (state: 'waiting_user_edit')
 [Opens plan.md in nano (or $EDITOR)]
 [User edits, saves, exits]
-Plan reloaded ✓
+Agent reviews changes...
+  • 2 tasks added
+  • 1 task marked complete
+Plan updated ✓
+Agent resumes execution
 ```
+
+⚠️ **IMPORTANT:** `/editPlan` is **agent-managed** editing:
+1. Agent pauses all operations (mutual exclusion)
+2. Agent opens editor and waits for you to finish
+3. Agent reviews your changes and validates the plan
+4. Agent resumes with updated plan
+
+This is different from editing plan.md externally (which is unsupported - see Q4 in Section 11.1).
 
 **Implementation:**
 ```typescript
@@ -657,15 +670,30 @@ const InputBox: React.FC<{ onSubmit: (input: string) => void }> = ({ onSubmit })
 // Domain layer handles /editPlan command
 async function handleUserInput(input: string, context: ExecutionContext): Promise<void> {
   if (input === '/editPlan') {
-    const editor = process.env.EDITOR || 'nano';
-    // Use spawn for interactive editor (not execFile - needs TTY)
-    const child = spawn(editor, ['plan.md'], { stdio: 'inherit' });
+    // 1. Snapshot current plan
+    const oldPlan = deepClone(context.planManager.getCurrentPlan());
 
+    // 2. Pause agent (state transition)
+    context.callbacks.onStateChange({ type: 'waiting_user_edit', snapshot: oldPlan });
+
+    // 3. Open editor (blocking)
+    const editor = process.env.EDITOR || 'nano';
+    const child = spawn(editor, ['plan.md'], { stdio: 'inherit' });
     await new Promise((resolve) => child.on('close', resolve));
 
-    // Reload plan after edit
-    context.planManager.reload();
-    context.callbacks.onPlanUpdated(context.planManager.plan);
+    // 4. Reload and validate
+    const newPlan = context.planManager.reload();
+    const validation = context.planManager.validate(newPlan);
+    if (!validation.valid) {
+      throw new Error(`Invalid plan: ${validation.errors.join(', ')}`);
+    }
+
+    // 5. Compute and display diff
+    const diff = context.planManager.diff(oldPlan, newPlan);
+    context.callbacks.onPlanUpdated(newPlan, diff);
+
+    // 6. Resume agent
+    context.callbacks.onStateChange({ type: 'idle' });
   } else {
     // Regular message processing
     await context.orchestrator.processMessage(input, context);
@@ -805,6 +833,19 @@ class OllamaClient {
 ---
 
 ## 6. Module Design
+
+**📖 For detailed LLM prompt engineering specifications, see [PROMPTS.md](./PROMPTS.md)**
+
+This section covers the core modules in each layer. For complete details on:
+- Tool calling format (Claude Code style)
+- OllamaClient.call() interface and context assembly
+- Plan document structure with acceptance criteria and decisions
+- models.json format and model selection
+- AGENTS.md conventions
+- Message history formatting
+- Response examples and tool schema generation
+
+Refer to the dedicated PROMPTS.md document.
 
 ### 6.1 Agent Orchestrator (Domain)
 
@@ -1596,70 +1637,55 @@ function formatTaskList(tasks: PlanTask[]): string {
 ```typescript
 type PlanId = string & { __brand: 'PlanId' };
 type SessionId = string & { __brand: 'SessionId' };
-type TaskId = string & { __brand: 'TaskId' };
 
 interface Plan {
   planId: PlanId;
   sessionId: SessionId;
+  status: PlanStatus;
   goal: string;
-  goals: string[];
-  architecture: Architecture;
-  tasks: PlanTask[];
-  executionLog: PlanLogEntry[];
+  acceptanceCriteria: AcceptanceCriterion[];
+  decisionsMade: Decision[];
+  decisionsRejected: Decision[];
+  executionLog: LogEntry[];
   metadata: PlanMetadata;
 }
 
-interface Architecture {
-  overview: string;
-  dataFlow: string;
-  decisions: ArchitectureDecision[];
+type PlanStatus = 'planning' | 'in_progress' | 'blocked' | 'completed' | 'failed';
+
+interface AcceptanceCriterion {
+  description: string;
+  completed: boolean;
+  notes?: string;
 }
 
-interface ArchitectureDecision {
+interface Decision {
   title: string;
   rationale: string;
+  alternatives?: string[];
   timestamp: number;
 }
 
-interface PlanTask {
-  id: TaskId;
-  description: string;
-  status: TaskStatus;
-  notes?: string;
-  createdAt: number;
-  updatedAt: number;
-}
-
-type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'failed';
-
-interface PlanLogEntry {
+interface LogEntry {
   timestamp: number;
-  type: LogEntryType;
-  content: string;
-  taskId?: TaskId;
+  action: string;
+  result: string;
+  toolsUsed: string[];
 }
-
-type LogEntryType =
-  | 'task_start'
-  | 'task_complete'
-  | 'thought'
-  | 'tool_call'
-  | 'error'
-  | 'iteration_summary';
 
 interface PlanMetadata {
   createdAt: number;
   updatedAt: number;
   version: number;
-  status: PlanStatus;
-  modelUsed: string;
-  totalDuration: number;
-  toolCalls: number;
-  filesModified: string[];
 }
-
-type PlanStatus = 'planning' | 'executing' | 'completed' | 'failed';
 ```
+
+**Note:** This structure is designed to provide rich context to the LLM:
+- **Acceptance Criteria** - Clear definition of "done"
+- **Decisions Made** - Documents why we chose specific approaches
+- **Decisions Rejected** - Prevents backtracking to failed approaches
+- **Execution Log** - Summarized history of key actions and results
+
+For detailed serialization format and usage, see [PROMPTS.md](./PROMPTS.md).
 
 **Agent State:**
 ```typescript
@@ -1984,54 +2010,116 @@ type ShellProgress =
 
 **Timeline:** Phase 3 (after basic tool calling works in Phase 2)
 
-**Q4: How to handle plan conflicts (concurrent edits)?**
-- **Decision:** ✅ **Last write wins - plan.md is TUI-managed only**
-- **Rationale:** Plan file is generated/managed by TUI, not for external editing
-- **User contract:** Edit plan through TUI only; external edits will be lost
+**Q4: How to handle plan editing and conflicts?**
+- **Decision:** ✅ **Two modes: Agent-managed editing vs External editing**
 
-**Design Principle:**
+**1. Agent-Managed Editing (`/editPlan` command):**
+- ✅ **FULLY SUPPORTED** - User types `/editPlan` in TUI
+- Agent pauses execution (state: 'waiting_user_edit')
+- Agent opens editor ($EDITOR or nano) and waits for completion
+- Agent reviews changes, validates plan structure
+- Agent computes and displays diff
+- Agent resumes with updated plan
+
+**Why this works:**
 ```
-plan.md is OUTPUT, not INPUT
-- Generated by agent/TUI
-- Users can VIEW it (it's markdown)
-- Users CANNOT reliably edit it externally
-- Changes made outside TUI will be overwritten
+┌─────────────────────────────────────────────┐
+│ Mutual Exclusion via Agent State Machine   │
+├─────────────────────────────────────────────┤
+│ • Only one writer at a time (agent OR user) │
+│ • Agent controls timing via state           │
+│ • No concurrent writes → no conflicts       │
+│ • Simple implementation, clear ownership    │
+└─────────────────────────────────────────────┘
 ```
 
-**Why This Is Simple:**
-
+**Implementation:**
 ```typescript
-// Last write wins - no conflict detection needed
+// Agent-managed editing - fully supported
+async handleEditPlan(context: ExecutionContext): Promise<void> {
+  // 1. Snapshot for diff
+  const oldPlan = deepClone(context.planManager.getCurrentPlan());
+
+  // 2. Pause agent (mutual exclusion)
+  context.callbacks.onStateChange({ type: 'waiting_user_edit', snapshot: oldPlan });
+
+  // 3. Open editor (blocking)
+  const editor = process.env.EDITOR || 'nano';
+  const child = spawn(editor, ['plan.md'], { stdio: 'inherit' });
+  await new Promise((resolve) => child.on('close', resolve));
+
+  // 4. Reload and validate
+  const newPlan = context.planManager.reload();
+  const validation = context.planManager.validate(newPlan);
+  if (!validation.valid) throw new Error('Invalid plan');
+
+  // 5. Review changes
+  const diff = context.planManager.diff(oldPlan, newPlan);
+  context.callbacks.onPlanUpdated(newPlan, diff);
+
+  // 6. Resume agent
+  context.callbacks.onStateChange({ type: 'idle' });
+}
+```
+
+**2. External Editing (outside agent):**
+- ❌ **UNSUPPORTED** - User edits plan.md in another terminal/editor while agent runs
+- Agent ignores external changes
+- Agent overwrites on next save
+- **Agent wins** - plan.md is agent-managed output
+
+**Why external edits are unsupported:**
+```
+plan.md is OUTPUT, not INPUT (when agent is running)
+- Generated/managed by agent
+- Users can VIEW it (it's markdown)
+- Users CANNOT reliably edit it externally while agent runs
+- External changes will be overwritten
+```
+
+**Last write wins - no conflict detection:**
+```typescript
+// Simple save - no locking, no file watching needed
 async savePlan(plan: Plan): Promise<void> {
   await fs.writeFile('plan.md', serialize(plan));
-  // TUI owns this file, external edits are unsupported
+  // Agent owns this file during execution
 }
 ```
 
 **Benefits:**
-- ✅ Simple implementation (no locking, no file watching)
+- ✅ Simple implementation (no file locking, no watching)
 - ✅ No conflict resolution UI needed
-- ✅ Clear ownership: TUI manages plan.md
-- ✅ Users can still read/view plan.md for reference
+- ✅ Clear ownership: Agent manages plan.md
+- ✅ Users can still view plan.md for reference
+- ✅ `/editPlan` provides controlled editing when needed
 
 **Documentation:**
 ```markdown
-# plan.md Usage
+# plan.md Editing
 
-⚠️ **IMPORTANT:** plan.md is managed by the agent TUI.
+⚠️ **TWO WAYS TO EDIT:**
+
+✅ **SUPPORTED: Via `/editPlan` command**
+Type `/editPlan` in the agent TUI:
+- Agent pauses and opens your editor
+- You edit, save, exit
+- Agent reviews changes and continues
+
+❌ **UNSUPPORTED: External editing**
+While agent is running, do NOT edit plan.md externally:
+- Changes will be lost (agent overwrites)
+- Use `/editPlan` command instead
 
 ✅ You can:
-- View plan.md in any editor
+- View plan.md in any editor (read-only)
 - Copy content for reference
 - Version control it with git
+- Edit freely when agent is not running
 
-❌ Do not:
-- Edit plan.md directly (changes will be lost)
+❌ Do not (while agent running):
+- Edit plan.md in another terminal
 - Open multiple agent sessions on same plan
-- Sync plan.md across machines while agent is running
-
-To modify the plan, use TUI commands:
-- Add tasks, mark complete, etc.
+- Sync plan.md across machines
 ```
 
 **Edge Case: Multiple Sessions**
@@ -2046,7 +2134,7 @@ If we ever support true multi-agent collaboration:
 - Requires distributed consensus, much complexity
 - Not needed for MVP or single-agent use
 
-**Decision:** Keep it simple. Plan.md is TUI-owned output. No conflict detection needed.
+**Decision:** Two-mode approach - agent-managed editing via `/editPlan` (supported), external editing (unsupported, agent wins).
 
 ### 11.2 Future Enhancements
 
@@ -2093,9 +2181,13 @@ If we ever support true multi-agent collaboration:
 
 ### 12.2 References
 
+**Documentation:**
+- Architecture overview: This document (ARCHITECTURE.md)
+- LLM prompt engineering: [PROMPTS.md](./PROMPTS.md)
+- Development guidelines: [CLAUDE.md](./CLAUDE.md)
+
 **Existing Codebase:**
 - v1 source: `./simple-agent/`
-- Architecture review: This document
 
 **Technologies:**
 - [TypeScript](https://www.typescriptlang.org/)
