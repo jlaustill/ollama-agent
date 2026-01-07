@@ -45,7 +45,7 @@
   - Input box fixed at bottom (standard terminal UX)
   - Update plan via chat ("update task 3") OR `/editPlan` command (opens nano/editor)
 - **Keep:** Real-time updates, streaming output
-- **Discard:** Split-screen, mode switching, box borders
+- **Discard:** Split-screen, complex 6-state system, box borders
 
 **Factory Pattern for Tools**
 - Easy to add new tools without touching core agent
@@ -155,6 +155,8 @@ type AgentState =
   | { type: 'executing', plan: Plan, taskIndex: number }
   | { type: 'waiting_approval', pendingOperation: FileOperation }
   | { type: 'error', error: Error, recoverable: boolean };
+
+// For session-level states (Plan Mode vs Execute Mode), see Section 3.2
 ```
 
 **Explicit Dependencies:**
@@ -332,6 +334,43 @@ npx husky init
 - Display never touches data layer
 - Domain coordinates but doesn't implement infrastructure
 - Data layer is pure I/O, no business logic
+
+### 3.2 Session State Model
+
+The system uses a 2×2 orthogonal state model:
+
+**Dimension 1: Session Mode** (What phase are we in?)
+- **Plan Mode**: Agent only edits plan_doc.md, no other work
+  - User reviews and modifies plan
+  - Agent proposes task additions
+  - No code changes, no tool execution
+- **Execute Mode**: Agent performs task work
+  - Executes tools to accomplish tasks
+  - Makes changes toward acceptance criteria
+  - Can switch back to Plan Mode if new work requested
+
+**Dimension 2: Execution Policy** (How are changes approved?)
+- **Confirm Mode**: Agent shows diff → User approves → Change applied
+- **Auto Mode**: Agent makes changes automatically to finish current task
+
+**State Transitions:**
+```
+┌─────────────┐         User approves       ┌──────────────┐
+│ PLAN MODE   │ ──────────────────────────→ │ EXECUTE MODE │
+│             │                              │              │
+│ • Edit plan │ ←────────────────────────── │ • Do work    │
+└─────────────┘  (task not in current plan) └──────────────┘
+
+Sessions always start in Plan Mode.
+```
+
+**2×2 Matrix:**
+| | Confirm | Auto |
+|---|---|---|
+| **Plan** | Review plan changes before applying | Apply plan changes immediately |
+| **Execute** | Approve each tool execution | Complete task autonomously |
+
+**Note:** This is simpler than v1's 3×2=6 state system because the two dimensions are orthogonal and independent.
 
 ---
 
@@ -564,7 +603,7 @@ const App: React.FC<{ plan: Plan }> = ({ plan }) => {
 **Problems in v1:**
 - Split-screen panes were confusing (too much competing info)
 - Box borders felt cluttered and noisy
-- Mode switching added unnecessary complexity
+- Mode switching added unnecessary complexity (3 modes × 2 submodes = 6 states)
 
 **v2 Solution: Single scrolling chat view (like a terminal)**
 
@@ -577,16 +616,28 @@ Status: Idle ⏸️
 ## Goal
 Create user authentication API with JWT tokens
 
-## Tasks
-- [x] Setup Express + TypeScript
-- [x] Create User model
-- [ ] Implement /register endpoint
-- [ ] Implement /login endpoint
-- [ ] Add JWT middleware
+## Goals
+- Secure password storage
+- Token-based authentication
+- Protected API routes
 
-## Architecture Decisions
-- Using bcrypt for password hashing
-- JWT tokens with 24h expiry
+## Acceptance Criteria
+- [x] Users can register with email/password
+- [x] Passwords are hashed with bcrypt
+- [ ] Users can login and receive JWT token
+- [ ] Protected routes verify JWT tokens
+- [ ] Tokens expire after 24 hours
+
+## Decisions Made
+- **Decision:** Use bcrypt for password hashing
+  - **Rationale:** Industry standard, built-in salting, configurable work factor
+  - **Alternatives:** argon2 (more modern, but bcrypt widely tested)
+- **Decision:** JWT tokens with 24h expiry
+  - **Rationale:** Balance between security and UX
+
+## Execution Log
+- [2024-01-06 10:30] Setup Express + TypeScript → Success
+- [2024-01-06 10:45] Created User model with bcrypt → Success
 
 ────────────────────────────────────────────────
 
@@ -702,7 +753,7 @@ async function handleUserInput(input: string, context: ExecutionContext): Promis
 ```
 
 **Benefits:**
-- ✅ No mode switching - simpler mental model
+- ✅ Simplified mode system (2×2 orthogonal states vs v1's 6 states) - clearer mental model
 - ✅ Natural chat interface everyone understands
 - ✅ Scroll up to see history (standard terminal UX)
 - ✅ Raw markdown is clean and readable
@@ -1012,9 +1063,9 @@ type ValidationResult =
 
 interface PlanUpdate {
   goal?: string;
-  goals?: string[];
-  architecture?: Partial<Architecture>;
-  tasks?: PlanTask[];
+  acceptanceCriteria?: AcceptanceCriterion[];
+  decisionsMade?: Decision[];
+  decisionsRejected?: Decision[];
 }
 ```
 
@@ -1027,16 +1078,16 @@ class PlanManager {
     return {
       planId: crypto.randomUUID(),
       sessionId,
+      status: 'planning',
       goal,
-      goals: [],
-      architecture: { overview: '', dataFlow: '', decisions: [] },
-      tasks: [],
+      acceptanceCriteria: [],
+      decisionsMade: [],
+      decisionsRejected: [],
       executionLog: [],
       metadata: {
         createdAt: Date.now(),
         updatedAt: Date.now(),
         version: 1,
-        status: 'planning',
       },
     };
   }
@@ -1071,8 +1122,12 @@ class PlanManager {
       errors.push({ field: 'goal', message: 'Goal is required' });
     }
 
-    if (plan.tasks.some(t => !t.description || t.description.trim().length === 0)) {
-      errors.push({ field: 'tasks', message: 'All tasks must have descriptions' });
+    if (!plan.acceptanceCriteria || plan.acceptanceCriteria.length === 0) {
+      errors.push({ field: 'acceptanceCriteria', message: 'At least one acceptance criterion is required' });
+    }
+
+    if (plan.acceptanceCriteria.some(ac => !ac.description || ac.description.trim().length === 0)) {
+      errors.push({ field: 'acceptanceCriteria', message: 'All acceptance criteria must have descriptions' });
     }
 
     // More validation rules...
@@ -1689,12 +1744,18 @@ For detailed serialization format and usage, see [PROMPTS.md](./PROMPTS.md).
 
 **Agent State:**
 ```typescript
+/**
+ * AgentState represents the agent execution loop state.
+ *
+ * Note: This is separate from Session Mode (Plan/Execute) documented in Section 3.2.
+ * These states describe what the agent is currently doing within Execute Mode.
+ */
 type AgentState =
   | { type: 'idle' }
-  | { type: 'planning'; currentGoal: string }
+  | { type: 'planning'; currentGoal: string }        // Planning within Execute Mode
   | { type: 'executing_tool'; tool: string; args: Record<string, unknown> }
   | { type: 'tool_completed'; result: ToolResult }
-  | { type: 'waiting_approval'; operation: PendingOperation }
+  | { type: 'waiting_approval'; operation: PendingOperation }  // Confirm mode
   | { type: 'completed'; response: string }
   | { type: 'error'; error: Error; recoverable: boolean };
 
@@ -2012,6 +2073,8 @@ type ShellProgress =
 
 **Q4: How to handle plan editing and conflicts?**
 - **Decision:** ✅ **Two modes: Agent-managed editing vs External editing**
+
+**Note:** For the overall session mode system (Plan Mode vs Execute Mode), see Section 3.2. This question specifically addresses file editing within Execute Mode.
 
 **1. Agent-Managed Editing (`/editPlan` command):**
 - ✅ **FULLY SUPPORTED** - User types `/editPlan` in TUI
