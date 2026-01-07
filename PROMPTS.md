@@ -304,7 +304,9 @@ ${examples.join('\n\n')}`;
    - `Message` interface ensures proper history format
    - No implicit dependencies
 
-### 3.4 Three-Stage Workflow (Planning → Execution → Summarization)
+### 3.4 Three-Stage Workflow State (Planning → Execution → Summarization)
+
+**This is STATE LEVEL 3 of 3 - see ARCHITECTURE.md Section 3.1 for overview.**
 
 **Core Principle:** Context is ALWAYS bounded to `plan_doc.md + last 5 messages + current ask`. The plan_doc.md IS the memory - it's a living, summarized document that grows through structured workflow, not by dumping full conversation history.
 
@@ -350,6 +352,11 @@ Every user request follows this 3-stage cycle:
 - Summarization is **proactive** (normal workflow), not reactive (emergency)
 - User participates in memory formation ("we also did X!")
 - plan_doc.md becomes authoritative memory going forward
+
+**Related State Concepts:**
+- For session-level mode (Plan/Execute) and permission policy, see ARCHITECTURE.md Section 3.2
+- For agent execution loop state (what's happening right now), see ARCHITECTURE.md Section 8.1
+- For overview of how these three state concepts relate, see ARCHITECTURE.md Section 3.1
 
 ---
 

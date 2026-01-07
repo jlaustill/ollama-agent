@@ -335,7 +335,61 @@ npx husky init
 - Domain coordinates but doesn't implement infrastructure
 - Data layer is pure I/O, no business logic
 
-### 3.2 Session State Model
+### 3.1 State Architecture Overview
+
+**The system tracks THREE orthogonal state concepts:**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ 1. SESSION STATE (Section 3.2)                              │
+│    "What mode is the session in?"                           │
+│    • Plan Mode vs Execute Mode                              │
+│    • Confirm vs Auto policy                                 │
+│    • Controls: Can agent make changes? Need approval?       │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│ 2. AGENT STATE (Section 8.1)                                │
+│    "What is the agent doing RIGHT NOW?"                     │
+│    • idle, executing_tool, waiting_approval, completed, etc.│
+│    • Controls: What to display in UI, what can happen next  │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│ 3. WORKFLOW STATE (PROMPTS.md Section 3.4)                  │
+│    "What stage of the 3-phase workflow for current task?"  │
+│    • Planning → Execution → Summarization                   │
+│    • Controls: Which prompt template, which model to use    │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**These are INDEPENDENT and track different concerns:**
+
+Example scenario showing all three:
+```typescript
+SESSION STATE:    Execute Mode + Auto policy
+AGENT STATE:      executing_tool { tool: 'read_file', args: {...} }
+WORKFLOW STATE:   Stage 2 (Execution) - working through task list
+```
+
+**Why three separate concepts?**
+- **Session State**: User's intent and permission model (high-level)
+- **Agent State**: Execution loop mechanics (implementation detail)
+- **Workflow State**: Prompt engineering pattern (how we structure LLM calls)
+
+**Common confusion to avoid:**
+```
+❌ "If we're in Execute Mode (session), why does AgentState have 'planning'?"
+✅ Answer: Execute Mode means "doing work", and 'planning' within AgentState
+   means the agent is figuring out how to accomplish the current task within
+   that work - it's NOT the session-level Plan Mode.
+```
+
+---
+
+### 3.2 Session State Model (User Intent & Permission Policy)
+
+**This is STATE LEVEL 1 of 3 - see Section 3.1 for overview.**
 
 The system uses a 2×2 orthogonal state model:
 
@@ -371,6 +425,11 @@ Sessions always start in Plan Mode.
 | **Execute** | Approve each tool execution | Complete task autonomously |
 
 **Note:** This is simpler than v1's 3×2=6 state system because the two dimensions are orthogonal and independent.
+
+**Related State Concepts:**
+- For agent execution loop state (what's happening right now), see Section 8.1 AgentState
+- For workflow stage (Planning/Execution/Summarization), see PROMPTS.md Section 3.4
+- For overview of how these three state concepts relate, see Section 3.1
 
 ---
 
@@ -1745,14 +1804,33 @@ For detailed serialization format and usage, see [PROMPTS.md](./PROMPTS.md).
 **Agent State:**
 ```typescript
 /**
- * AgentState represents the agent execution loop state.
+ * AgentState represents the agent execution loop state - STATE LEVEL 2 of 3.
+ * See Section 3.1 for complete state architecture overview.
  *
- * Note: This is separate from Session Mode (Plan/Execute) documented in Section 3.2.
- * These states describe what the agent is currently doing within Execute Mode.
+ * THIS IS DIFFERENT FROM:
+ * - Session Mode (Plan/Execute from Section 3.2) - that's user intent
+ * - Workflow Stage (Planning/Execution/Summarization from PROMPTS.md 3.4) - that's prompt structure
+ *
+ * AgentState tracks: "What is the agent doing RIGHT NOW within the execution loop?"
+ *
+ * Examples of how these differ:
+ *
+ * Scenario 1:
+ *   SESSION STATE: Execute Mode (doing work)
+ *   AGENT STATE: 'planning' (figuring out approach for current task)
+ *   WORKFLOW STATE: Stage 1 (Planning phase of 3-stage workflow)
+ *
+ * Scenario 2:
+ *   SESSION STATE: Execute Mode + Auto policy
+ *   AGENT STATE: 'executing_tool' (calling read_file)
+ *   WORKFLOW STATE: Stage 2 (Execution phase)
+ *
+ * Note: The 'planning' state here means "agent is thinking about task approach",
+ * NOT the session-level Plan Mode (which means "only edit plan_doc.md").
  */
 type AgentState =
   | { type: 'idle' }
-  | { type: 'planning'; currentGoal: string }        // Planning within Execute Mode
+  | { type: 'planning'; currentGoal: string }        // Thinking, NOT Plan Mode
   | { type: 'executing_tool'; tool: string; args: Record<string, unknown> }
   | { type: 'tool_completed'; result: ToolResult }
   | { type: 'waiting_approval'; operation: PendingOperation }  // Confirm mode
@@ -1766,6 +1844,11 @@ interface PendingOperation {
   args: Record<string, unknown>;
 }
 ```
+
+**Related State Concepts:**
+- For session-level mode (Plan/Execute) and permission policy, see Section 3.2
+- For workflow stage (Planning/Execution/Summarization), see PROMPTS.md Section 3.4
+- For overview of how these three state concepts relate, see Section 3.1
 
 **Tool Types:**
 ```typescript

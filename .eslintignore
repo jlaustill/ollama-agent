@@ -1,0 +1,4 @@
+node_modules
+dist
+simple-agent
+.husky
