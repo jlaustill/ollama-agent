@@ -23,14 +23,74 @@ import { createMessage } from "../types/Message";
 export const createInitialState = (
   cwd: string,
   debugMode: boolean,
-): AppState => ({
-  messages: [],
-  currentInput: "",
-  debugMode,
-  cwd,
-  terminalHeight: 24, // Default terminal height
-  scrollOffset: 0, // 0 = showing latest messages
-});
+): AppState => {
+  // Create test messages for scrolling development
+  const testMessages = [
+    createMessage("user", "Hello! Can you help me with a project?"),
+    createMessage(
+      "agent",
+      "Of course! I'd be happy to help. What kind of project are you working on?",
+    ),
+    createMessage(
+      "user",
+      "I'm building a TUI application with React and Ink. I need to implement scrolling functionality.",
+    ),
+    createMessage(
+      "agent",
+      "Great choice! React Ink is perfect for terminal UIs. For scrolling, you'll want to: 1) Track scroll offset in state, 2) Calculate visible messages based on terminal height, 3) Wire up keyboard handlers for arrow keys. Let me know which part you'd like to focus on first.",
+    ),
+    createMessage("user", "How do I calculate which messages are visible?"),
+    createMessage(
+      "agent",
+      "You'll need to slice your messages array based on the visible area. Here's the approach:\n\n1. Get terminal height (using useStdout hook)\n2. Subtract reserved lines (top bar, input bar)\n3. Calculate how many lines each message takes (accounting for wrapping)\n4. Work backwards from the end, accumulating line counts\n5. Stop when you've filled the visible area\n\nThis ensures multi-line messages don't overflow the screen.",
+    ),
+    createMessage(
+      "user",
+      "What about handling arrow keys for scrolling up and down?",
+    ),
+    createMessage(
+      "agent",
+      "Use Ink's useInput hook! Here's a pattern:\n\nif (key.upArrow) {\n  dispatch({ type: 'SCROLL_UP', lines: 1 });\n}\n\nMake sure to handle this BEFORE other input handlers, and use return to prevent the arrow key from being treated as text input.",
+    ),
+    createMessage("user", "Should I use overflow: hidden on the chat area?"),
+    createMessage(
+      "agent",
+      "Actually, no! If you're implementing manual scrolling with state, overflow: hidden will fight against your logic. Remove it and let your slicing algorithm control what's visible.",
+    ),
+    createMessage("user", "How do I handle terminal resizing?"),
+    createMessage(
+      "agent",
+      "Ink's useStdout hook gives you stdout.rows and stdout.columns, which update automatically on resize. Just recalculate your visible messages whenever these values change. React will handle the re-render for you.",
+    ),
+    createMessage(
+      "user",
+      "This is really helpful! One more question: what about PageUp and PageDown?",
+    ),
+    createMessage(
+      "agent",
+      "Same pattern as arrow keys, just scroll more lines at once:\n\nif (key.pageUp) {\n  dispatch({ type: 'SCROLL_UP', lines: 10 });\n}\n\nif (key.pageDown) {\n  dispatch({ type: 'SCROLL_DOWN', lines: 10 });\n}\n\nYou can adjust the '10' based on typical terminal height for comfortable jumping.",
+    ),
+    createMessage("user", "Perfect! Let me implement this now."),
+    createMessage(
+      "agent",
+      "Sounds good! Remember to test with: 1) Short messages, 2) Very long messages that wrap, 3) Terminal resizing, 4) Scrolling to top/bottom boundaries. Good luck!",
+    ),
+    createMessage("user", "Thanks for all the help!"),
+    createMessage(
+      "agent",
+      "You're welcome! Feel free to ask if you run into any issues. Happy coding! 🚀",
+    ),
+  ];
+
+  return {
+    messages: testMessages,
+    currentInput: "",
+    debugMode,
+    cwd,
+    terminalHeight: 24, // Default terminal height
+    scrollOffset: 0, // 0 = showing latest messages
+  };
+};
 
 /**
  * App reducer - handles all state transitions

@@ -3,10 +3,13 @@ import sliceMessages from "./sliceMessages";
 import { createMessage } from "../types/Message";
 import type { Message } from "../types/Message";
 
+// Default terminal width for tests
+const DEFAULT_WIDTH = 80;
+
 describe("sliceMessages", () => {
   describe("empty messages", () => {
     it("should return empty array when messages array is empty", () => {
-      const result = sliceMessages([], 10, 0);
+      const result = sliceMessages([], 10, 0, DEFAULT_WIDTH);
 
       expect(result).toEqual([]);
       expect(result).toHaveLength(0);
@@ -23,7 +26,7 @@ describe("sliceMessages", () => {
         createMessage("user", "Message 3"),
       ];
 
-      const result = sliceMessages(messages, 2, 0);
+      const result = sliceMessages(messages, 2, 0, DEFAULT_WIDTH);
 
       expect(result).toHaveLength(2);
       expect(result[0]?.content).toBe("Response 2");
@@ -37,7 +40,7 @@ describe("sliceMessages", () => {
         createMessage("user", "Message 2"),
       ];
 
-      const result = sliceMessages(messages, 10, 0);
+      const result = sliceMessages(messages, 10, 0, DEFAULT_WIDTH);
 
       expect(result).toHaveLength(3);
       expect(result).toEqual(messages);
@@ -48,7 +51,7 @@ describe("sliceMessages", () => {
         createMessage("user", `Message ${i + 1}`),
       );
 
-      const result = sliceMessages(messages, 5, 0);
+      const result = sliceMessages(messages, 5, 0, DEFAULT_WIDTH);
 
       expect(result).toHaveLength(5);
       expect(result[0]?.content).toBe("Message 16");
@@ -66,7 +69,7 @@ describe("sliceMessages", () => {
         createMessage("user", "Message 3"),
       ];
 
-      const result = sliceMessages(messages, 2, 1); // Scroll up 1
+      const result = sliceMessages(messages, 2, 1, DEFAULT_WIDTH); // Scroll up 1
 
       expect(result).toHaveLength(2);
       expect(result[0]?.content).toBe("Message 2");
@@ -82,7 +85,7 @@ describe("sliceMessages", () => {
         createMessage("user", "Message 3"),
       ];
 
-      const result = sliceMessages(messages, 2, 3); // Scroll up 3
+      const result = sliceMessages(messages, 2, 3, DEFAULT_WIDTH); // Scroll up 3
 
       expect(result).toHaveLength(2);
       expect(result[0]?.content).toBe("Message 1");
@@ -95,7 +98,7 @@ describe("sliceMessages", () => {
         createMessage("agent", "Response 1"),
       ];
 
-      const result = sliceMessages(messages, 2, 10); // Scroll way up
+      const result = sliceMessages(messages, 2, 10, DEFAULT_WIDTH); // Scroll way up
 
       // Should show first messages (can't scroll beyond start)
       expect(result).toHaveLength(0);
@@ -109,7 +112,7 @@ describe("sliceMessages", () => {
         createMessage("agent", "Response 1"),
       ];
 
-      const result = sliceMessages(messages, 0, 0);
+      const result = sliceMessages(messages, 0, 0, DEFAULT_WIDTH);
 
       expect(result).toHaveLength(0);
     });
@@ -121,7 +124,7 @@ describe("sliceMessages", () => {
         createMessage("user", "Message 2"),
       ];
 
-      const result = sliceMessages(messages, 1, 0);
+      const result = sliceMessages(messages, 1, 0, DEFAULT_WIDTH);
 
       expect(result).toHaveLength(1);
       expect(result[0]?.content).toBe("Message 2");
@@ -130,7 +133,7 @@ describe("sliceMessages", () => {
     it("should handle single message", () => {
       const messages: Message[] = [createMessage("user", "Single message")];
 
-      const result = sliceMessages(messages, 10, 0);
+      const result = sliceMessages(messages, 10, 0, DEFAULT_WIDTH);
 
       expect(result).toHaveLength(1);
       expect(result[0]?.content).toBe("Single message");
@@ -145,7 +148,7 @@ describe("sliceMessages", () => {
       const originalLength = messages.length;
       const originalFirst = messages[0];
 
-      sliceMessages(messages, 2, 0);
+      sliceMessages(messages, 2, 0, DEFAULT_WIDTH);
 
       expect(messages).toHaveLength(originalLength);
       expect(messages[0]).toBe(originalFirst);
@@ -159,7 +162,7 @@ describe("sliceMessages", () => {
       );
 
       // Show 3 messages, scroll up 3 (should show messages 5-7)
-      const result = sliceMessages(messages, 3, 3);
+      const result = sliceMessages(messages, 3, 3, DEFAULT_WIDTH);
 
       expect(result).toHaveLength(3);
       expect(result[0]?.content).toBe("Message 5");
@@ -173,7 +176,7 @@ describe("sliceMessages", () => {
       );
 
       // Show 3 messages, scroll up 7 (should show messages 1-3)
-      const result = sliceMessages(messages, 3, 7);
+      const result = sliceMessages(messages, 3, 7, DEFAULT_WIDTH);
 
       expect(result).toHaveLength(3);
       expect(result[0]?.content).toBe("Message 1");
@@ -187,8 +190,8 @@ describe("sliceMessages", () => {
       );
 
       // Increase visible lines from 3 to 5
-      const before = sliceMessages(messages, 3, 0);
-      const after = sliceMessages(messages, 5, 0);
+      const before = sliceMessages(messages, 3, 0, DEFAULT_WIDTH);
+      const after = sliceMessages(messages, 5, 0, DEFAULT_WIDTH);
 
       expect(before).toHaveLength(3);
       expect(after).toHaveLength(5);
@@ -201,8 +204,8 @@ describe("sliceMessages", () => {
       );
 
       // Decrease visible lines from 5 to 3
-      const before = sliceMessages(messages, 5, 0);
-      const after = sliceMessages(messages, 3, 0);
+      const before = sliceMessages(messages, 5, 0, DEFAULT_WIDTH);
+      const after = sliceMessages(messages, 3, 0, DEFAULT_WIDTH);
 
       expect(before).toHaveLength(5);
       expect(after).toHaveLength(3);

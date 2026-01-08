@@ -9,7 +9,7 @@
  */
 
 import React from "react";
-import { Box } from "ink";
+import { Box, useStdout } from "ink";
 import { useAppContext } from "../context/AppContext";
 import { useTerminalSizeWithDefault } from "../hooks/useTerminalSize";
 import sliceMessages from "../utils/sliceMessages";
@@ -28,20 +28,23 @@ const RESERVED_LINES = 4;
  */
 const ChatArea: React.FC = () => {
   const { state } = useAppContext();
+  const { stdout } = useStdout();
   const terminalHeight = useTerminalSizeWithDefault(24);
+  const terminalWidth = stdout?.columns ?? 80;
 
   // Calculate visible area for messages
   const visibleLines = Math.max(1, terminalHeight - RESERVED_LINES);
 
-  // Get visible messages based on scroll offset
+  // Get visible messages based on scroll offset and terminal dimensions
   const visibleMessages = sliceMessages(
     state.messages,
     visibleLines,
     state.scrollOffset,
+    terminalWidth,
   );
 
   return (
-    <Box width="100%" flexGrow={1} flexDirection="column" overflow="hidden">
+    <Box width="100%" flexGrow={1} flexDirection="column">
       {state.messages.length === 0 ? (
         <WelcomeMessage />
       ) : (

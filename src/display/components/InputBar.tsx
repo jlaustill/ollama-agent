@@ -17,6 +17,25 @@ const InputBar: React.FC = () => {
   const { dispatch } = useAppContext();
 
   useInput((input, key) => {
+    // Scroll handlers - MUST come first to prevent arrow keys from typing
+    if (key.upArrow) {
+      dispatch({ type: "SCROLL_UP", lines: 1 });
+      return;
+    }
+    if (key.downArrow) {
+      dispatch({ type: "SCROLL_DOWN", lines: 1 });
+      return;
+    }
+    if (key.pageUp) {
+      dispatch({ type: "SCROLL_UP", lines: 10 });
+      return;
+    }
+    if (key.pageDown) {
+      dispatch({ type: "SCROLL_DOWN", lines: 10 });
+      return;
+    }
+
+    // Input handlers
     if (key.return) {
       // Enter key - submit input
       if (localInput.trim() !== "") {
