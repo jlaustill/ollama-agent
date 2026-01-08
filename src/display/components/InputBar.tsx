@@ -6,15 +6,26 @@
  * - Local input state for responsive typing
  * - Enter to submit (dispatches to context)
  * - Backspace to delete characters
+ * - Slash command detection and execution
  */
 
-import React, { useState } from "react";
-import { Box, Text, useInput } from "ink";
+import React, { useState, useMemo } from "react";
+import { Box, Text, useInput, useApp } from "ink";
 import { useAppContext } from "../context/AppContext";
+import SlashCommandHandler from "../utils/SlashCommandHandler";
+import ExitCommand from "../commands/ExitCommand";
 
 const InputBar: React.FC = () => {
   const [localInput, setLocalInput] = useState("");
   const { dispatch } = useAppContext();
+  const { exit } = useApp();
+
+  // Initialize slash command handler (memoized to avoid recreating)
+  const commandHandler = useMemo(() => {
+    const handler = new SlashCommandHandler();
+    handler.register(new ExitCommand());
+    return handler;
+  }, []);
 
   useInput((input, key) => {
     // Scroll handlers - MUST come first to prevent arrow keys from typing
@@ -39,6 +50,29 @@ const InputBar: React.FC = () => {
     if (key.return) {
       // Enter key - submit input
       if (localInput.trim() !== "") {
+        // Check if it's a slash command
+        if (SlashCommandHandler.isSlashCommand(localInput)) {
+          const result = commandHandler.execute(localInput);
+
+          if (result.type === "exit") {
+            // Exit the application
+            exit();
+            return;
+          }
+
+          if (result.type === "error") {
+            // TODO: Display error message in chat
+            // For now, just clear the input
+            setLocalInput("");
+            return;
+          }
+
+          // Command executed successfully, clear input
+          setLocalInput("");
+          return;
+        }
+
+        // Regular message - submit to context
         // Update context with the input text
         dispatch({ type: "UPDATE_INPUT", input: localInput });
         // Submit (creates message and clears context input)

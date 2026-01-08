@@ -34,7 +34,9 @@ describe("App", () => {
 
   describe("Rendering", () => {
     it("should render without errors", () => {
-      const { lastFrame } = render(<App cwd="/test/path" debugMode={false} />);
+      const { lastFrame } = render(
+        <App cwd="/test/path" debugMode={false} includeTestMessages={false} />,
+      );
 
       expect(lastFrame()).toBeDefined();
     });
@@ -48,31 +50,41 @@ describe("App", () => {
     });
 
     it("should render TopBar with debug indicator when debugMode is true", () => {
-      const { lastFrame } = render(<App cwd="/test/path" debugMode={true} />);
+      const { lastFrame } = render(
+        <App cwd="/test/path" debugMode={true} includeTestMessages={false} />,
+      );
 
       expect(lastFrame()).toContain("DEBUG");
     });
 
     it("should not render debug indicator when debugMode is false", () => {
-      const { lastFrame } = render(<App cwd="/test/path" debugMode={false} />);
+      const { lastFrame } = render(
+        <App cwd="/test/path" debugMode={false} includeTestMessages={false} />,
+      );
 
       expect(lastFrame()).not.toContain("DEBUG");
     });
 
     it("should render welcome message in ChatArea initially", () => {
-      const { lastFrame } = render(<App cwd="/test/path" debugMode={false} />);
+      const { lastFrame } = render(
+        <App cwd="/test/path" debugMode={false} includeTestMessages={false} />,
+      );
 
       expect(lastFrame()).toContain("Welcome to ollama-agent");
     });
 
     it("should render InputBar prompt", () => {
-      const { lastFrame } = render(<App cwd="/test/path" debugMode={false} />);
+      const { lastFrame } = render(
+        <App cwd="/test/path" debugMode={false} includeTestMessages={false} />,
+      );
 
       expect(lastFrame()).toContain(">");
     });
 
     it("should render InputBar cursor indicator", () => {
-      const { lastFrame } = render(<App cwd="/test/path" debugMode={false} />);
+      const { lastFrame } = render(
+        <App cwd="/test/path" debugMode={false} includeTestMessages={false} />,
+      );
 
       expect(lastFrame()).toContain("█");
     });
@@ -80,7 +92,9 @@ describe("App", () => {
 
   describe("Layout", () => {
     it("should render all three main sections", () => {
-      const { lastFrame } = render(<App cwd="/test/path" debugMode={false} />);
+      const { lastFrame } = render(
+        <App cwd="/test/path" debugMode={false} includeTestMessages={false} />,
+      );
 
       const frame = lastFrame();
 
@@ -97,7 +111,9 @@ describe("App", () => {
     it("should use column layout", () => {
       // This is tested implicitly through rendering
       // Ink's Box with flexDirection="column" stacks elements vertically
-      const { lastFrame } = render(<App cwd="/test/path" debugMode={false} />);
+      const { lastFrame } = render(
+        <App cwd="/test/path" debugMode={false} includeTestMessages={false} />,
+      );
 
       expect(lastFrame()).toBeDefined();
     });
@@ -123,12 +139,14 @@ describe("App", () => {
     it("should toggle debug mode correctly", () => {
       // Test false -> true
       const { lastFrame, rerender } = render(
-        <App cwd="/test" debugMode={false} />,
+        <App cwd="/test" debugMode={false} includeTestMessages={false} />,
       );
 
       expect(lastFrame()).not.toContain("DEBUG");
 
-      rerender(<App cwd="/test" debugMode={true} />);
+      rerender(
+        <App cwd="/test" debugMode={true} includeTestMessages={false} />,
+      );
 
       expect(lastFrame()).toContain("DEBUG");
     });
@@ -136,7 +154,9 @@ describe("App", () => {
 
   describe("Component integration", () => {
     it("should integrate TopBar, ChatArea, and InputBar", () => {
-      const { lastFrame } = render(<App cwd="/home/user" debugMode={true} />);
+      const { lastFrame } = render(
+        <App cwd="/home/user" debugMode={true} includeTestMessages={false} />,
+      );
 
       const frame = lastFrame();
 
@@ -155,7 +175,9 @@ describe("App", () => {
     it("should provide context to child components", () => {
       // This is tested indirectly - if components render correctly,
       // they successfully consumed the context
-      const { lastFrame } = render(<App cwd="/test" debugMode={false} />);
+      const { lastFrame } = render(
+        <App cwd="/test" debugMode={false} includeTestMessages={false} />,
+      );
 
       expect(lastFrame()).toContain("Welcome to ollama-agent");
     });
@@ -168,7 +190,9 @@ describe("App", () => {
         write: vi.fn(),
       });
 
-      const { lastFrame } = render(<App cwd="/test" debugMode={false} />);
+      const { lastFrame } = render(
+        <App cwd="/test" debugMode={false} includeTestMessages={false} />,
+      );
 
       expect(lastFrame()).toBeDefined();
     });
@@ -179,7 +203,9 @@ describe("App", () => {
         write: vi.fn(),
       });
 
-      const { lastFrame } = render(<App cwd="/test" debugMode={false} />);
+      const { lastFrame } = render(
+        <App cwd="/test" debugMode={false} includeTestMessages={false} />,
+      );
 
       expect(lastFrame()).toBeDefined();
     });
@@ -187,13 +213,17 @@ describe("App", () => {
 
   describe("Edge cases", () => {
     it("should handle empty CWD", () => {
-      const { lastFrame } = render(<App cwd="" debugMode={false} />);
+      const { lastFrame } = render(
+        <App cwd="" debugMode={false} includeTestMessages={false} />,
+      );
 
       expect(lastFrame()).toBeDefined();
     });
 
     it("should handle root directory as CWD", () => {
-      const { lastFrame } = render(<App cwd="/" debugMode={false} />);
+      const { lastFrame } = render(
+        <App cwd="/" debugMode={false} includeTestMessages={false} />,
+      );
 
       expect(lastFrame()).toContain("/");
     });

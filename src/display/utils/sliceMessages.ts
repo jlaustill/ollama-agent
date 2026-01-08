@@ -63,6 +63,16 @@ const sliceMessages = (
     return [];
   }
 
+  // If no visible lines, return empty
+  if (visibleLines === 0) {
+    return [];
+  }
+
+  // If scrolled beyond all messages, return empty
+  if (scrollOffset >= messages.length) {
+    return [];
+  }
+
   // Start from the end and work backwards, accumulating line counts
   const visibleMessages: Message[] = [];
   let accumulatedLines = 0;

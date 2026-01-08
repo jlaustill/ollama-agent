@@ -28,7 +28,11 @@ describe("ChatArea", () => {
   describe("Empty state", () => {
     it("should render welcome message when no messages exist", () => {
       const { lastFrame } = render(
-        <AppContextProvider initialCwd="/test" debugMode={false}>
+        <AppContextProvider
+          initialCwd="/test"
+          debugMode={false}
+          includeTestMessages={false}
+        >
           <ChatArea />
         </AppContextProvider>,
       );
@@ -38,7 +42,11 @@ describe("ChatArea", () => {
 
     it("should not render message list when empty", () => {
       const { lastFrame } = render(
-        <AppContextProvider initialCwd="/test" debugMode={false}>
+        <AppContextProvider
+          initialCwd="/test"
+          debugMode={false}
+          includeTestMessages={false}
+        >
           <ChatArea />
         </AppContextProvider>,
       );
@@ -53,7 +61,11 @@ describe("ChatArea", () => {
       const TestWrapper: React.FC<{ children: React.ReactNode }> = ({
         children,
       }) => (
-        <AppContextProvider initialCwd="/test" debugMode={false}>
+        <AppContextProvider
+          initialCwd="/test"
+          debugMode={false}
+          includeTestMessages={false}
+        >
           {children}
         </AppContextProvider>
       );
@@ -88,7 +100,11 @@ describe("ChatArea", () => {
       });
 
       const { lastFrame } = render(
-        <AppContextProvider initialCwd="/test" debugMode={false}>
+        <AppContextProvider
+          initialCwd="/test"
+          debugMode={false}
+          includeTestMessages={false}
+        >
           <ChatArea />
         </AppContextProvider>,
       );
@@ -103,7 +119,11 @@ describe("ChatArea", () => {
       });
 
       const { lastFrame } = render(
-        <AppContextProvider initialCwd="/test" debugMode={false}>
+        <AppContextProvider
+          initialCwd="/test"
+          debugMode={false}
+          includeTestMessages={false}
+        >
           <ChatArea />
         </AppContextProvider>,
       );
@@ -121,7 +141,11 @@ describe("ChatArea", () => {
       });
 
       const { lastFrame, rerender } = render(
-        <AppContextProvider initialCwd="/test" debugMode={false}>
+        <AppContextProvider
+          initialCwd="/test"
+          debugMode={false}
+          includeTestMessages={false}
+        >
           <ChatArea />
         </AppContextProvider>,
       );
@@ -135,7 +159,11 @@ describe("ChatArea", () => {
       });
 
       rerender(
-        <AppContextProvider initialCwd="/test" debugMode={false}>
+        <AppContextProvider
+          initialCwd="/test"
+          debugMode={false}
+          includeTestMessages={false}
+        >
           <ChatArea />
         </AppContextProvider>,
       );
@@ -147,7 +175,11 @@ describe("ChatArea", () => {
   describe("Layout", () => {
     it("should render without errors", () => {
       const { lastFrame } = render(
-        <AppContextProvider initialCwd="/test" debugMode={false}>
+        <AppContextProvider
+          initialCwd="/test"
+          debugMode={false}
+          includeTestMessages={false}
+        >
           <ChatArea />
         </AppContextProvider>,
       );
@@ -159,7 +191,11 @@ describe("ChatArea", () => {
       // This is tested by Ink's layout engine
       // Just verify component renders
       const { lastFrame } = render(
-        <AppContextProvider initialCwd="/test" debugMode={false}>
+        <AppContextProvider
+          initialCwd="/test"
+          debugMode={false}
+          includeTestMessages={false}
+        >
           <ChatArea />
         </AppContextProvider>,
       );
@@ -174,7 +210,11 @@ describe("ChatArea", () => {
       // This component correctly consumes state.scrollOffset
       // Full integration test will be in App.test.tsx
       const { lastFrame } = render(
-        <AppContextProvider initialCwd="/test" debugMode={false}>
+        <AppContextProvider
+          initialCwd="/test"
+          debugMode={false}
+          includeTestMessages={false}
+        >
           <ChatArea />
         </AppContextProvider>,
       );
@@ -194,7 +234,11 @@ describe("ChatArea", () => {
       });
 
       const { lastFrame } = render(
-        <AppContextProvider initialCwd="/test" debugMode={false}>
+        <AppContextProvider
+          initialCwd="/test"
+          debugMode={false}
+          includeTestMessages={false}
+        >
           <ChatArea />
         </AppContextProvider>,
       );
@@ -210,7 +254,11 @@ describe("ChatArea", () => {
       });
 
       const { lastFrame } = render(
-        <AppContextProvider initialCwd="/test" debugMode={false}>
+        <AppContextProvider
+          initialCwd="/test"
+          debugMode={false}
+          includeTestMessages={false}
+        >
           <ChatArea />
         </AppContextProvider>,
       );

@@ -17,6 +17,7 @@ import InputBar from "./InputBar";
 export interface AppProps {
   cwd: string;
   debugMode: boolean;
+  includeTestMessages?: boolean;
 }
 
 /**
@@ -32,12 +33,16 @@ export interface AppProps {
  * │ InputBar (sticky)   │
  * └─────────────────────┘
  */
-const App: React.FC<AppProps> = ({ cwd, debugMode }) => {
+const App: React.FC<AppProps> = ({ cwd, debugMode, includeTestMessages }) => {
   const { stdout } = useStdout();
   const termHeight = stdout?.rows ?? 24;
 
   return (
-    <AppContextProvider initialCwd={cwd} debugMode={debugMode}>
+    <AppContextProvider
+      initialCwd={cwd}
+      debugMode={debugMode}
+      includeTestMessages={includeTestMessages}
+    >
       <Box
         flexDirection="column"
         height={termHeight}

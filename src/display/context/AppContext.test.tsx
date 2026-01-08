@@ -13,7 +13,7 @@ import type { AppState } from "../types/AppState";
 describe("AppContext", () => {
   describe("createInitialState", () => {
     it("should create initial state with provided values", () => {
-      const state = createInitialState("/home/user/project", true);
+      const state = createInitialState("/home/user/project", true, false);
 
       expect(state).toEqual({
         messages: [],
@@ -26,7 +26,7 @@ describe("AppContext", () => {
     });
 
     it("should create initial state with debug mode false", () => {
-      const state = createInitialState("/tmp", false);
+      const state = createInitialState("/tmp", false, false);
 
       expect(state.debugMode).toBe(false);
       expect(state.cwd).toBe("/tmp");
@@ -37,7 +37,7 @@ describe("AppContext", () => {
     let baseState: AppState;
 
     beforeEach(() => {
-      baseState = createInitialState("/home/user", false);
+      baseState = createInitialState("/home/user", false, false);
     });
 
     describe("ADD_MESSAGE action", () => {
@@ -275,7 +275,11 @@ describe("AppContext", () => {
     it("should provide context to children", () => {
       const { result } = renderHook(() => useAppContext(), {
         wrapper: ({ children }) => (
-          <AppContextProvider initialCwd="/test" debugMode={false}>
+          <AppContextProvider
+            initialCwd="/test"
+            debugMode={false}
+            includeTestMessages={false}
+          >
             {children}
           </AppContextProvider>
         ),
@@ -289,7 +293,11 @@ describe("AppContext", () => {
     it("should allow dispatching actions", () => {
       const { result } = renderHook(() => useAppContext(), {
         wrapper: ({ children }) => (
-          <AppContextProvider initialCwd="/test" debugMode={false}>
+          <AppContextProvider
+            initialCwd="/test"
+            debugMode={false}
+            includeTestMessages={false}
+          >
             {children}
           </AppContextProvider>
         ),
@@ -323,7 +331,11 @@ describe("AppContext", () => {
     it("should handle multiple state updates", () => {
       const { result } = renderHook(() => useAppContext(), {
         wrapper: ({ children }) => (
-          <AppContextProvider initialCwd="/test" debugMode={false}>
+          <AppContextProvider
+            initialCwd="/test"
+            debugMode={false}
+            includeTestMessages={false}
+          >
             {children}
           </AppContextProvider>
         ),

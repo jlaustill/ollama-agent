@@ -22,7 +22,11 @@ describe("InputBar", () => {
   describe("Rendering", () => {
     it("should render without errors", () => {
       const { lastFrame } = render(
-        <AppContextProvider initialCwd="/test" debugMode={false}>
+        <AppContextProvider
+          initialCwd="/test"
+          debugMode={false}
+          includeTestMessages={false}
+        >
           <InputBar />
         </AppContextProvider>,
       );
@@ -32,7 +36,11 @@ describe("InputBar", () => {
 
     it("should render prompt character", () => {
       const { lastFrame } = render(
-        <AppContextProvider initialCwd="/test" debugMode={false}>
+        <AppContextProvider
+          initialCwd="/test"
+          debugMode={false}
+          includeTestMessages={false}
+        >
           <InputBar />
         </AppContextProvider>,
       );
@@ -42,7 +50,11 @@ describe("InputBar", () => {
 
     it("should render cursor indicator", () => {
       const { lastFrame } = render(
-        <AppContextProvider initialCwd="/test" debugMode={false}>
+        <AppContextProvider
+          initialCwd="/test"
+          debugMode={false}
+          includeTestMessages={false}
+        >
           <InputBar />
         </AppContextProvider>,
       );
@@ -52,7 +64,11 @@ describe("InputBar", () => {
 
     it("should render empty input initially", () => {
       const { lastFrame } = render(
-        <AppContextProvider initialCwd="/test" debugMode={false}>
+        <AppContextProvider
+          initialCwd="/test"
+          debugMode={false}
+          includeTestMessages={false}
+        >
           <InputBar />
         </AppContextProvider>,
       );
@@ -71,7 +87,11 @@ describe("InputBar", () => {
       });
 
       const { lastFrame, rerender } = render(
-        <AppContextProvider initialCwd="/test" debugMode={false}>
+        <AppContextProvider
+          initialCwd="/test"
+          debugMode={false}
+          includeTestMessages={false}
+        >
           <InputBar />
         </AppContextProvider>,
       );
@@ -83,7 +103,11 @@ describe("InputBar", () => {
         delete: false,
       } as Key);
       rerender(
-        <AppContextProvider initialCwd="/test" debugMode={false}>
+        <AppContextProvider
+          initialCwd="/test"
+          debugMode={false}
+          includeTestMessages={false}
+        >
           <InputBar />
         </AppContextProvider>,
       );
@@ -98,7 +122,11 @@ describe("InputBar", () => {
       });
 
       const { lastFrame, rerender } = render(
-        <AppContextProvider initialCwd="/test" debugMode={false}>
+        <AppContextProvider
+          initialCwd="/test"
+          debugMode={false}
+          includeTestMessages={false}
+        >
           <InputBar />
         </AppContextProvider>,
       );
@@ -110,7 +138,11 @@ describe("InputBar", () => {
         delete: false,
       } as Key);
       rerender(
-        <AppContextProvider initialCwd="/test" debugMode={false}>
+        <AppContextProvider
+          initialCwd="/test"
+          debugMode={false}
+          includeTestMessages={false}
+        >
           <InputBar />
         </AppContextProvider>,
       );
@@ -120,7 +152,11 @@ describe("InputBar", () => {
         delete: false,
       } as Key);
       rerender(
-        <AppContextProvider initialCwd="/test" debugMode={false}>
+        <AppContextProvider
+          initialCwd="/test"
+          debugMode={false}
+          includeTestMessages={false}
+        >
           <InputBar />
         </AppContextProvider>,
       );
@@ -135,7 +171,11 @@ describe("InputBar", () => {
       });
 
       const { lastFrame } = render(
-        <AppContextProvider initialCwd="/test" debugMode={false}>
+        <AppContextProvider
+          initialCwd="/test"
+          debugMode={false}
+          includeTestMessages={false}
+        >
           <InputBar />
         </AppContextProvider>,
       );
@@ -158,7 +198,11 @@ describe("InputBar", () => {
       });
 
       const { lastFrame } = render(
-        <AppContextProvider initialCwd="/test" debugMode={false}>
+        <AppContextProvider
+          initialCwd="/test"
+          debugMode={false}
+          includeTestMessages={false}
+        >
           <InputBar />
         </AppContextProvider>,
       );
@@ -183,7 +227,11 @@ describe("InputBar", () => {
       });
 
       const { lastFrame, rerender } = render(
-        <AppContextProvider initialCwd="/test" debugMode={false}>
+        <AppContextProvider
+          initialCwd="/test"
+          debugMode={false}
+          includeTestMessages={false}
+        >
           <InputBar />
         </AppContextProvider>,
       );
@@ -196,7 +244,11 @@ describe("InputBar", () => {
           delete: false,
         } as Key);
         rerender(
-          <AppContextProvider initialCwd="/test" debugMode={false}>
+          <AppContextProvider
+            initialCwd="/test"
+            debugMode={false}
+            includeTestMessages={false}
+          >
             <InputBar />
           </AppContextProvider>,
         );
@@ -211,7 +263,11 @@ describe("InputBar", () => {
         delete: false,
       } as Key);
       rerender(
-        <AppContextProvider initialCwd="/test" debugMode={false}>
+        <AppContextProvider
+          initialCwd="/test"
+          debugMode={false}
+          includeTestMessages={false}
+        >
           <InputBar />
         </AppContextProvider>,
       );
@@ -227,7 +283,11 @@ describe("InputBar", () => {
       });
 
       const { lastFrame, rerender } = render(
-        <AppContextProvider initialCwd="/test" debugMode={false}>
+        <AppContextProvider
+          initialCwd="/test"
+          debugMode={false}
+          includeTestMessages={false}
+        >
           <InputBar />
         </AppContextProvider>,
       );
@@ -239,7 +299,11 @@ describe("InputBar", () => {
         delete: false,
       } as Key);
       rerender(
-        <AppContextProvider initialCwd="/test" debugMode={false}>
+        <AppContextProvider
+          initialCwd="/test"
+          debugMode={false}
+          includeTestMessages={false}
+        >
           <InputBar />
         </AppContextProvider>,
       );
@@ -249,7 +313,11 @@ describe("InputBar", () => {
         delete: false,
       } as Key);
       rerender(
-        <AppContextProvider initialCwd="/test" debugMode={false}>
+        <AppContextProvider
+          initialCwd="/test"
+          debugMode={false}
+          includeTestMessages={false}
+        >
           <InputBar />
         </AppContextProvider>,
       );
@@ -263,7 +331,11 @@ describe("InputBar", () => {
         backspace: false,
       } as Key);
       rerender(
-        <AppContextProvider initialCwd="/test" debugMode={false}>
+        <AppContextProvider
+          initialCwd="/test"
+          debugMode={false}
+          includeTestMessages={false}
+        >
           <InputBar />
         </AppContextProvider>,
       );
@@ -279,7 +351,11 @@ describe("InputBar", () => {
       });
 
       const { lastFrame } = render(
-        <AppContextProvider initialCwd="/test" debugMode={false}>
+        <AppContextProvider
+          initialCwd="/test"
+          debugMode={false}
+          includeTestMessages={false}
+        >
           <InputBar />
         </AppContextProvider>,
       );
@@ -303,7 +379,11 @@ describe("InputBar", () => {
       });
 
       const { lastFrame, rerender } = render(
-        <AppContextProvider initialCwd="/test" debugMode={false}>
+        <AppContextProvider
+          initialCwd="/test"
+          debugMode={false}
+          includeTestMessages={false}
+        >
           <InputBar />
         </AppContextProvider>,
       );
@@ -316,7 +396,11 @@ describe("InputBar", () => {
           delete: false,
         } as Key);
         rerender(
-          <AppContextProvider initialCwd="/test" debugMode={false}>
+          <AppContextProvider
+            initialCwd="/test"
+            debugMode={false}
+            includeTestMessages={false}
+          >
             <InputBar />
           </AppContextProvider>,
         );
@@ -331,7 +415,11 @@ describe("InputBar", () => {
         delete: false,
       } as Key);
       rerender(
-        <AppContextProvider initialCwd="/test" debugMode={false}>
+        <AppContextProvider
+          initialCwd="/test"
+          debugMode={false}
+          includeTestMessages={false}
+        >
           <InputBar />
         </AppContextProvider>,
       );
@@ -349,7 +437,11 @@ describe("InputBar", () => {
       });
 
       const { lastFrame } = render(
-        <AppContextProvider initialCwd="/test" debugMode={false}>
+        <AppContextProvider
+          initialCwd="/test"
+          debugMode={false}
+          includeTestMessages={false}
+        >
           <InputBar />
         </AppContextProvider>,
       );
@@ -371,7 +463,11 @@ describe("InputBar", () => {
       });
 
       const { lastFrame, rerender } = render(
-        <AppContextProvider initialCwd="/test" debugMode={false}>
+        <AppContextProvider
+          initialCwd="/test"
+          debugMode={false}
+          includeTestMessages={false}
+        >
           <InputBar />
         </AppContextProvider>,
       );
@@ -383,7 +479,11 @@ describe("InputBar", () => {
         delete: false,
       } as Key);
       rerender(
-        <AppContextProvider initialCwd="/test" debugMode={false}>
+        <AppContextProvider
+          initialCwd="/test"
+          debugMode={false}
+          includeTestMessages={false}
+        >
           <InputBar />
         </AppContextProvider>,
       );
@@ -393,7 +493,11 @@ describe("InputBar", () => {
         delete: false,
       } as Key);
       rerender(
-        <AppContextProvider initialCwd="/test" debugMode={false}>
+        <AppContextProvider
+          initialCwd="/test"
+          debugMode={false}
+          includeTestMessages={false}
+        >
           <InputBar />
         </AppContextProvider>,
       );
@@ -405,7 +509,11 @@ describe("InputBar", () => {
         delete: false,
       } as Key);
       rerender(
-        <AppContextProvider initialCwd="/test" debugMode={false}>
+        <AppContextProvider
+          initialCwd="/test"
+          debugMode={false}
+          includeTestMessages={false}
+        >
           <InputBar />
         </AppContextProvider>,
       );
@@ -418,7 +526,11 @@ describe("InputBar", () => {
   describe("Layout", () => {
     it("should render in a box with border", () => {
       const { lastFrame } = render(
-        <AppContextProvider initialCwd="/test" debugMode={false}>
+        <AppContextProvider
+          initialCwd="/test"
+          debugMode={false}
+          includeTestMessages={false}
+        >
           <InputBar />
         </AppContextProvider>,
       );
@@ -431,7 +543,11 @@ describe("InputBar", () => {
       // This is tested implicitly through rendering
       // Ink's Box with flexDirection="row" puts elements horizontally
       const { lastFrame } = render(
-        <AppContextProvider initialCwd="/test" debugMode={false}>
+        <AppContextProvider
+          initialCwd="/test"
+          debugMode={false}
+          includeTestMessages={false}
+        >
           <InputBar />
         </AppContextProvider>,
       );
@@ -443,7 +559,11 @@ describe("InputBar", () => {
   describe("Integration with context", () => {
     it("should work with AppContext provider", () => {
       const { lastFrame } = render(
-        <AppContextProvider initialCwd="/test" debugMode={false}>
+        <AppContextProvider
+          initialCwd="/test"
+          debugMode={false}
+          includeTestMessages={false}
+        >
           <InputBar />
         </AppContextProvider>,
       );
