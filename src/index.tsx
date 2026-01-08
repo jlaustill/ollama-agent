@@ -44,4 +44,4 @@ const args = cli as CliArgs;
 // Yargs automatically handles --help and --version (exits before reaching here)
 // Use USER_CWD from shell script (user's original directory), fallback to process.cwd()
 const userCwd = process.env.USER_CWD ?? process.cwd();
-render(<App cwd={userCwd} debugMode={args.debug} />);
+render(<App cwd={userCwd} debugMode={args.debug} />, { patchConsole: true });

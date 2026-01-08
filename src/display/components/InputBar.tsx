@@ -37,7 +37,13 @@ const InputBar: React.FC = () => {
   });
 
   return (
-    <Box borderStyle="single" borderTop paddingX={1} flexDirection="row">
+    <Box
+      borderStyle="single"
+      borderTop
+      paddingX={1}
+      flexDirection="row"
+      width="100%"
+    >
       <Text bold color="green">
         &gt;{" "}
       </Text>

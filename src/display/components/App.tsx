@@ -8,7 +8,7 @@
  */
 
 import React from "react";
-import { Box } from "ink";
+import { Box, useStdout } from "ink";
 import { AppContextProvider } from "../context/AppContext";
 import TopBar from "./TopBar";
 import ChatArea from "./ChatArea";
@@ -32,18 +32,32 @@ export interface AppProps {
  * │ InputBar (sticky)   │
  * └─────────────────────┘
  */
-const App: React.FC<AppProps> = ({ cwd, debugMode }) => (
-  <AppContextProvider initialCwd={cwd} debugMode={debugMode}>
-    <Box flexDirection="column" minHeight="100%">
-      <Box flexShrink={0}>
-        <TopBar cwd={cwd} debugMode={debugMode} />
+const App: React.FC<AppProps> = ({ cwd, debugMode }) => {
+  const { stdout } = useStdout();
+  const termHeight = stdout?.rows ?? 24;
+
+  return (
+    <AppContextProvider initialCwd={cwd} debugMode={debugMode}>
+      <Box
+        flexDirection="column"
+        height={termHeight}
+        borderColor="blue"
+        borderStyle="single"
+      >
+        <Box flexShrink={0}>
+          <TopBar cwd={cwd} debugMode={debugMode} />
+        </Box>
+
+        <Box flexGrow={1} flexShrink={1}>
+          <ChatArea />
+        </Box>
+
+        <Box flexShrink={0}>
+          <InputBar />
+        </Box>
       </Box>
-      <ChatArea />
-      <Box flexShrink={0}>
-        <InputBar />
-      </Box>
-    </Box>
-  </AppContextProvider>
-);
+    </AppContextProvider>
+  );
+};
 
 export default App;

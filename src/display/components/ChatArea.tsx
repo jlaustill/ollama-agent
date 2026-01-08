@@ -41,7 +41,7 @@ const ChatArea: React.FC = () => {
   );
 
   return (
-    <Box flexGrow={1} flexDirection="column" overflow="hidden">
+    <Box width="100%" flexGrow={1} flexDirection="column" overflow="hidden">
       {state.messages.length === 0 ? (
         <WelcomeMessage />
       ) : (

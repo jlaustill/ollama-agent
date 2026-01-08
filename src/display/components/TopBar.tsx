@@ -16,6 +16,7 @@ const TopBar: React.FC<TopBarProps> = ({ cwd, debugMode }) => (
     borderBottom
     paddingX={1}
     justifyContent="space-between"
+    width="100%"
   >
     <Text dimColor>{cwd}</Text>
     {debugMode && (
