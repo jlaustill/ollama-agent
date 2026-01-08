@@ -18,4 +18,4 @@ cd "$SCRIPT_DIR"
 
 # For now, just run the entry point directly
 # Pass user's original directory as environment variable
-USER_CWD="$USER_DIR" npx tsx src/index.tsx "$@"
+USER_CWD="$USER_DIR" npx tsx src/cli.ts "$@"
