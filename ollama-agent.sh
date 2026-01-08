@@ -17,5 +17,5 @@ SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
 cd "$SCRIPT_DIR"
 
 # For now, just run the entry point directly
-# Future: Will parse commands and add working-dir flag like v1
-npx tsx src/index.ts "$@"
+# Pass user's original directory as environment variable
+USER_CWD="$USER_DIR" npx tsx src/index.tsx "$@"

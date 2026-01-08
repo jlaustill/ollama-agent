@@ -1401,6 +1401,714 @@ class OllamaClient {
 }
 ```
 
+### 6.5 Command Safety & Global Configuration (Domain + Data)
+
+**Files:**
+- `src/data/config/ConfigReader.ts` (Data Layer)
+- `src/domain/safety/CommandGuard.ts` (Domain Layer)
+
+**Responsibility:** Enforce security-first approach with user-controlled whitelist for tool execution
+
+#### 6.5.1 Architecture Overview
+
+**Security Philosophy:**
+- **Whitelist approach:** Explicit opt-in, nothing runs unless explicitly allowed
+- **Global configuration:** Settings shared across all projects (not per-repo)
+- **User control:** Users define what tools can do, not hardcoded in code
+- **Tool-specific:** Each tool has its own whitelist file for fine-grained control
+
+**Why Whitelist > Blacklist:**
+
+```
+❌ Blacklist Problems (v1 approach):
+- Can't anticipate all dangerous patterns
+- Overly restrictive (blocks legitimate use)
+- No user control (hardcoded in code)
+- Maintenance burden (update code for new patterns)
+
+✅ Whitelist Benefits (v2 approach):
+- Explicit opt-in (secure by default)
+- User decides what's safe for their workflow
+- Tool-specific (bash rules ≠ file write rules)
+- Zero-code updates (edit txt files)
+```
+
+#### 6.5.2 Configuration Structure
+
+**Global Config Directory:** `~/.local/share/ollama-agent/config/`
+
+```
+~/.local/share/ollama-agent/config/
+├── bash.txt              # Whitelist for bash/shell commands
+├── file_write.txt        # Whitelist for file write operations
+├── file_edit.txt         # Whitelist for file edit operations
+├── shell_exec.txt        # Whitelist for shell_exec tool
+└── README.md             # Usage documentation
+```
+
+**File Format:** One regex pattern per line, blank lines and `#` comments ignored
+
+**Example `bash.txt`:**
+```
+# Safe read-only commands
+^ls.*
+^cat\s+.*
+^grep.*
+^find.*
+
+# Package management (specific patterns)
+^npm\s+(install|test|run\s+lint).*
+^yarn\s+install.*
+
+# Git operations
+^git\s+(status|log|diff|branch).*
+```
+
+**Example `file_write.txt`:**
+```
+# Allow writes to specific directories
+^src/.*\.ts$
+^tests/.*\.test\.ts$
+^docs/.*\.md$
+
+# Allow config files
+^\.eslintrc\.json$
+^tsconfig\.json$
+^package\.json$
+```
+
+#### 6.5.3 ConfigReader (Data Layer)
+
+**File:** `src/data/config/ConfigReader.ts`
+
+**Responsibility:** Pure I/O for reading whitelist files, no business logic
+
+**Interface:**
+```typescript
+interface ConfigReader {
+  /**
+   * Load whitelist patterns for a specific tool
+   * Returns empty array if file doesn't exist (deny all)
+   */
+  loadWhitelist(toolName: string): Promise<WhitelistRule[]>;
+
+  /**
+   * Check if config directory exists, create if needed
+   */
+  ensureConfigDir(): Promise<void>;
+
+  /**
+   * Get full path to config directory
+   */
+  getConfigPath(): string;
+}
+
+interface WhitelistRule {
+  pattern: RegExp;        // Compiled regex
+  rawPattern: string;     // Original string (for display)
+  lineNumber: number;     // For error reporting
+}
+
+type ConfigError =
+  | { type: 'file_not_found'; toolName: string }
+  | { type: 'invalid_regex'; pattern: string; lineNumber: number; error: string }
+  | { type: 'permission_denied'; path: string };
+```
+
+**Implementation:**
+```typescript
+import { readFile, mkdir, access } from 'fs/promises';
+import { homedir } from 'os';
+import { join } from 'path';
+
+class ConfigReader {
+  private configDir: string;
+
+  constructor() {
+    // Global config location (not per-project)
+    this.configDir = join(homedir(), '.local', 'share', 'ollama-agent', 'config');
+  }
+
+  getConfigPath(): string {
+    return this.configDir;
+  }
+
+  async ensureConfigDir(): Promise<void> {
+    try {
+      await access(this.configDir);
+    } catch {
+      // Directory doesn't exist, create it
+      await mkdir(this.configDir, { recursive: true });
+    }
+  }
+
+  async loadWhitelist(toolName: string): Promise<WhitelistRule[]> {
+    const filePath = join(this.configDir, `${toolName}.txt`);
+
+    try {
+      const content = await readFile(filePath, 'utf-8');
+      return this.parseWhitelist(content);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        // File doesn't exist → empty whitelist → deny all
+        return [];
+      }
+      throw new DataError(`Failed to load whitelist for ${toolName}`, { cause: error });
+    }
+  }
+
+  private parseWhitelist(content: string): WhitelistRule[] {
+    const rules: WhitelistRule[] = [];
+    const lines = content.split('\n');
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]?.trim() ?? '';
+
+      // Skip empty lines and comments
+      if (line === '' || line.startsWith('#')) {
+        continue;
+      }
+
+      try {
+        // Compile regex (throws if invalid)
+        const pattern = new RegExp(line);
+
+        rules.push({
+          pattern,
+          rawPattern: line,
+          lineNumber: i + 1,
+        });
+      } catch (error) {
+        throw new DataError(
+          `Invalid regex in whitelist at line ${i + 1}: ${line}`,
+          { cause: error }
+        );
+      }
+    }
+
+    return rules;
+  }
+}
+```
+
+**Error Handling:**
+```typescript
+// Missing file → Empty whitelist (secure default)
+const rules = await configReader.loadWhitelist('bash');
+// rules.length === 0 → All commands require approval
+
+// Invalid regex → Fail fast with clear error
+// ❌ loadWhitelist('bash') throws:
+//    "Invalid regex in whitelist at line 5: ^ls[unclosed"
+```
+
+#### 6.5.4 CommandGuard (Domain Layer)
+
+**File:** `src/domain/safety/CommandGuard.ts`
+
+**Responsibility:** Enforce whitelist policy, queue approval requests, validate operations
+
+**Interface:**
+```typescript
+interface CommandGuard {
+  /**
+   * Check if operation is whitelisted
+   * Returns { allowed: true } if whitelisted
+   * Returns { allowed: false, reason: string } if needs approval
+   */
+  checkOperation(toolName: string, operation: ToolOperation): Promise<GuardResult>;
+
+  /**
+   * Request user approval for non-whitelisted operation
+   * Blocks until user responds
+   */
+  requestApproval(operation: PendingOperation): Promise<ApprovalResult>;
+
+  /**
+   * Reload whitelist rules (for when user edits config)
+   */
+  reloadWhitelist(toolName: string): Promise<void>;
+}
+
+interface ToolOperation {
+  tool: string;
+  args: Record<string, unknown>;
+  description: string;    // Human-readable description
+}
+
+type GuardResult =
+  | { allowed: true; matchedRule: string }
+  | { allowed: false; reason: 'not_whitelisted' | 'invalid_operation' };
+
+type ApprovalResult =
+  | { approved: true; remember: boolean }
+  | { approved: false; reason: string };
+
+interface PendingOperation {
+  tool: string;
+  operation: string;      // What will be executed
+  description: string;
+  risk: 'low' | 'medium' | 'high';
+}
+```
+
+**Implementation:**
+```typescript
+class CommandGuard {
+  private whitelists = new Map<string, WhitelistRule[]>();
+
+  constructor(
+    private configReader: ConfigReader,
+    private callbacks: GuardCallbacks
+  ) {}
+
+  async checkOperation(
+    toolName: string,
+    operation: ToolOperation
+  ): Promise<GuardResult> {
+    // Load whitelist for this tool (cached)
+    let rules = this.whitelists.get(toolName);
+    if (!rules) {
+      rules = await this.configReader.loadWhitelist(toolName);
+      this.whitelists.set(toolName, rules);
+    }
+
+    // Empty whitelist → Nothing allowed (secure default)
+    if (rules.length === 0) {
+      return {
+        allowed: false,
+        reason: 'not_whitelisted',
+      };
+    }
+
+    // Extract the actual operation string to check
+    const operationString = this.extractOperationString(operation);
+
+    // Check against whitelist patterns
+    for (const rule of rules) {
+      if (rule.pattern.test(operationString)) {
+        return {
+          allowed: true,
+          matchedRule: rule.rawPattern,
+        };
+      }
+    }
+
+    // No match → Needs approval
+    return {
+      allowed: false,
+      reason: 'not_whitelisted',
+    };
+  }
+
+  async requestApproval(operation: PendingOperation): Promise<ApprovalResult> {
+    // Delegate to display layer via callback
+    // Blocks until user responds
+    return this.callbacks.onApprovalNeeded(operation);
+  }
+
+  async reloadWhitelist(toolName: string): Promise<void> {
+    const rules = await this.configReader.loadWhitelist(toolName);
+    this.whitelists.set(toolName, rules);
+  }
+
+  private extractOperationString(operation: ToolOperation): string {
+    switch (operation.tool) {
+      case 'bash':
+      case 'shell_exec':
+        // Extract command string
+        return operation.args['command'] as string;
+
+      case 'file_write':
+      case 'file_edit':
+        // Extract file path
+        return operation.args['path'] as string;
+
+      default:
+        throw new Error(`Unknown tool for operation extraction: ${operation.tool}`);
+    }
+  }
+}
+
+interface GuardCallbacks {
+  /**
+   * Display layer shows approval prompt to user
+   * Returns user's decision + whether to remember
+   */
+  onApprovalNeeded(operation: PendingOperation): Promise<ApprovalResult>;
+}
+```
+
+#### 6.5.5 Integration with Tool Execution
+
+**Modified ToolRegistry (Domain Layer):**
+
+```typescript
+class ToolRegistry {
+  constructor(
+    private commandGuard: CommandGuard  // Injected
+  ) {}
+
+  async execute(toolName: string, args: Record<string, unknown>): Promise<ToolResult> {
+    const tool = this.tools.get(toolName);
+    if (!tool) {
+      return { success: false, error: `Tool '${toolName}' not found` };
+    }
+
+    // Check if tool requires safety check
+    if (this.requiresSafetyCheck(toolName)) {
+      const operation: ToolOperation = {
+        tool: toolName,
+        args,
+        description: tool.description,
+      };
+
+      // Enforce whitelist
+      const guardResult = await this.commandGuard.checkOperation(toolName, operation);
+
+      if (!guardResult.allowed) {
+        // Not whitelisted → Request approval
+        const pendingOp: PendingOperation = {
+          tool: toolName,
+          operation: this.formatOperation(toolName, args),
+          description: tool.description,
+          risk: this.assessRisk(toolName, args),
+        };
+
+        const approval = await this.commandGuard.requestApproval(pendingOp);
+
+        if (!approval.approved) {
+          return {
+            success: false,
+            error: 'Operation denied by user',
+          };
+        }
+
+        // If user wants to remember this, add to whitelist
+        if (approval.remember) {
+          // Display message instructing user to add pattern to config file
+          // (We don't auto-edit config files to avoid tampering)
+        }
+      }
+    }
+
+    // Execute tool (either whitelisted or approved)
+    try {
+      return await tool.execute(args);
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  private requiresSafetyCheck(toolName: string): boolean {
+    // Tools that need whitelist checks
+    return [
+      'bash',
+      'shell_exec',
+      'file_write',
+      'file_edit',
+      'file_delete',
+    ].includes(toolName);
+  }
+
+  private assessRisk(toolName: string, args: Record<string, unknown>): 'low' | 'medium' | 'high' {
+    // Risk assessment heuristics
+    if (toolName === 'file_delete') return 'high';
+    if (toolName === 'bash' && String(args['command']).includes('rm')) return 'high';
+    if (toolName === 'file_edit') return 'medium';
+    return 'low';
+  }
+
+  private formatOperation(toolName: string, args: Record<string, unknown>): string {
+    // Format operation for display to user
+    if (toolName === 'bash' || toolName === 'shell_exec') {
+      return String(args['command']);
+    }
+    if (toolName === 'file_write' || toolName === 'file_edit') {
+      return `${toolName}: ${String(args['path'])}`;
+    }
+    return `${toolName}(${JSON.stringify(args)})`;
+  }
+}
+```
+
+#### 6.5.6 Approval Flow (Display Layer)
+
+**Display layer shows approval prompt:**
+
+```typescript
+// src/display/tui/components/ApprovalPrompt.tsx
+const ApprovalPrompt: React.FC<{
+  operation: PendingOperation;
+  onApprove: (remember: boolean) => void;
+  onDeny: () => void;
+}> = ({ operation, onApprove, onDeny }) => {
+  return (
+    <Box flexDirection="column" padding={1}>
+      <Text bold color="yellow">
+        ⚠️  Permission Required
+      </Text>
+
+      <Text>
+        The agent wants to execute:
+      </Text>
+
+      <Box marginLeft={2}>
+        <Text color="cyan">{operation.operation}</Text>
+      </Box>
+
+      <Text dimColor>
+        Tool: {operation.tool} | Risk: {operation.risk}
+      </Text>
+
+      <Box marginTop={1}>
+        <Text>
+          [y] Allow once
+          [a] Allow and remember (add to whitelist)
+          [n] Deny
+        </Text>
+      </Box>
+    </Box>
+  );
+};
+```
+
+#### 6.5.7 Initial Setup & User Guidance
+
+**First Run:** When agent first starts and config directory doesn't exist:
+
+```typescript
+// src/domain/agent/AgentOrchestrator.ts
+async initialize(): Promise<void> {
+  // Ensure config directory exists
+  await this.configReader.ensureConfigDir();
+
+  // Check if any whitelist files exist
+  const configPath = this.configReader.getConfigPath();
+  const files = await fs.readdir(configPath).catch(() => []);
+
+  if (files.length === 0) {
+    // First run → Show setup message
+    this.callbacks.onFirstRun({
+      configPath,
+      message: `
+┌─────────────────────────────────────────────────┐
+│ Welcome to ollama-agent v2!                     │
+├─────────────────────────────────────────────────┤
+│                                                 │
+│ Security-First Setup                            │
+│                                                 │
+│ This agent uses a whitelist approach:          │
+│ - Operations require explicit approval         │
+│ - You control what the agent can do             │
+│ - Configuration is global (not per-project)     │
+│                                                 │
+│ Config directory created at:                    │
+│ ${configPath}
+│                                                 │
+│ Create whitelist files like:                    │
+│   bash.txt       - Shell commands              │
+│   file_write.txt - File write operations       │
+│                                                 │
+│ Example bash.txt:                               │
+│   ^ls.*                                         │
+│   ^cat\\s+.*                                     │
+│   ^npm\\s+(test|run\\s+lint).*                   │
+│                                                 │
+│ The agent will ask for approval for any         │
+│ operation not matching a whitelist pattern.    │
+│                                                 │
+└─────────────────────────────────────────────────┘
+      `,
+    });
+  }
+}
+```
+
+**Config README:** Auto-generated at `~/.local/share/ollama-agent/config/README.md`:
+
+````markdown
+# ollama-agent Configuration
+
+This directory contains whitelist files that control what operations the agent can perform.
+
+## Security Model
+
+- **Whitelist approach:** Operations require explicit approval unless whitelisted
+- **Per-tool files:** Each tool has its own whitelist (bash.txt, file_write.txt, etc.)
+- **Regex patterns:** One pattern per line, uses JavaScript regex syntax
+- **Global config:** Shared across all projects (not per-repo)
+
+## File Format
+
+```
+# Comments start with #
+^pattern1.*          # Regex pattern (one per line)
+^pattern2\s+.*       # Use \s for whitespace, .* for wildcards
+
+# Blank lines are ignored
+
+^another_pattern$
+```
+
+## Example: bash.txt
+
+Safe read-only commands:
+```
+^ls.*
+^cat\s+.*
+^grep.*
+^find.*
+^git\s+(status|log|diff|branch).*
+```
+
+Package management:
+```
+^npm\s+(install|test|run\s+lint).*
+^yarn\s+install.*
+```
+
+## Example: file_write.txt
+
+Allow writes to source directories:
+```
+^src/.*\.ts$
+^tests/.*\.test\.ts$
+^docs/.*\.md$
+```
+
+Allow config files:
+```
+^\.eslintrc\.json$
+^tsconfig\.json$
+^package\.json$
+```
+
+## Risk Assessment
+
+Operations are classified as:
+- **Low risk:** Read-only operations (ls, cat, grep)
+- **Medium risk:** File edits (write_file, edit_file)
+- **High risk:** Destructive operations (rm, file_delete)
+
+## Approval Flow
+
+When an operation doesn't match any whitelist pattern:
+1. Agent pauses and shows approval prompt
+2. You can:
+   - **Allow once:** Execute this time only
+   - **Allow and remember:** Execute and suggest whitelist pattern
+   - **Deny:** Block operation
+
+## Editing Whitelists
+
+Edit whitelist files with any text editor:
+```bash
+nano ~/.local/share/ollama-agent/config/bash.txt
+```
+
+Changes take effect immediately (agent reloads on next operation).
+
+## Testing Patterns
+
+Use online regex testers (regex101.com) to test patterns before adding them to whitelist files.
+
+## Security Best Practices
+
+- ✅ Start with minimal permissions, expand as needed
+- ✅ Use specific patterns (`^ls -la$`) over broad ones (`^ls.*`)
+- ✅ Review patterns regularly
+- ❌ Don't use overly broad patterns (`.*` matches everything)
+- ❌ Don't whitelist destructive commands without specific constraints
+````
+
+#### 6.5.8 Testing Strategy
+
+**Unit Tests:**
+```typescript
+describe('ConfigReader', () => {
+  it('should return empty array for missing file', async () => {
+    const reader = new ConfigReader();
+    const rules = await reader.loadWhitelist('nonexistent');
+    expect(rules).toEqual([]);
+  });
+
+  it('should parse valid whitelist', async () => {
+    // Mock fs.readFile to return test content
+    const rules = await reader.loadWhitelist('bash');
+    expect(rules).toHaveLength(3);
+    expect(rules[0]?.pattern).toBeInstanceOf(RegExp);
+  });
+
+  it('should throw on invalid regex', async () => {
+    // Mock content with invalid regex
+    await expect(reader.loadWhitelist('bash')).rejects.toThrow('Invalid regex');
+  });
+});
+
+describe('CommandGuard', () => {
+  it('should allow whitelisted operation', async () => {
+    const guard = new CommandGuard(mockReader, mockCallbacks);
+    const result = await guard.checkOperation('bash', {
+      tool: 'bash',
+      args: { command: 'ls -la' },
+      description: 'List files',
+    });
+    expect(result.allowed).toBe(true);
+  });
+
+  it('should deny non-whitelisted operation', async () => {
+    const result = await guard.checkOperation('bash', {
+      tool: 'bash',
+      args: { command: 'rm -rf /' },
+      description: 'Delete everything',
+    });
+    expect(result.allowed).toBe(false);
+  });
+
+  it('should request approval for non-whitelisted op', async () => {
+    const mockApproval = vi.fn().mockResolvedValue({ approved: true, remember: false });
+    const guard = new CommandGuard(mockReader, { onApprovalNeeded: mockApproval });
+
+    await guard.checkOperation('bash', { /* ... */ });
+
+    expect(mockApproval).toHaveBeenCalled();
+  });
+});
+```
+
+**Integration Tests:**
+```typescript
+describe('Tool Execution with Safety', () => {
+  it('should execute whitelisted command without approval', async () => {
+    // Setup: bash.txt contains ^ls.*
+    const registry = new ToolRegistry(commandGuard);
+
+    const result = await registry.execute('bash', { command: 'ls -la' });
+
+    expect(result.success).toBe(true);
+    // No approval callback should have been called
+  });
+
+  it('should request approval for non-whitelisted command', async () => {
+    // Setup: bash.txt does NOT contain ^rm.*
+    const registry = new ToolRegistry(commandGuard);
+
+    const result = await registry.execute('bash', { command: 'rm file.txt' });
+
+    // Approval callback should have been called
+    expect(mockApproval).toHaveBeenCalledWith({
+      tool: 'bash',
+      operation: 'rm file.txt',
+      risk: 'high',
+    });
+  });
+});
+```
+
 ---
 
 ## 7. Development Workflow

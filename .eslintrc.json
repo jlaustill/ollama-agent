@@ -26,7 +26,8 @@
         "argsIgnorePattern": "^_",
         "varsIgnorePattern": "^_"
       }
-    ]
+    ],
+    "import/extensions": "off"
   },
   "overrides": [
     {

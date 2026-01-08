@@ -1,10 +1,13 @@
 #!/usr/bin/env node
 
+import React from "react";
+import { render } from "ink";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
 import { readFileSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
+import App from "./display/components/App";
 
 /**
  * Entry point for ollama-agent v2
@@ -37,10 +40,8 @@ const cli = yargs(hideBin(process.argv))
 
 const args = cli as CliArgs;
 
-// Placeholder - will be replaced with actual agent orchestration
-// eslint-disable-next-line no-console
-console.log("ollama-agent v2");
-// eslint-disable-next-line no-console
-console.log(`Debug mode: ${args.debug ? "enabled" : "disabled"}`);
-
-process.exit(0);
+// Start TUI
+// Yargs automatically handles --help and --version (exits before reaching here)
+// Use USER_CWD from shell script (user's original directory), fallback to process.cwd()
+const userCwd = process.env.USER_CWD ?? process.cwd();
+render(<App cwd={userCwd} debugMode={args.debug} />);
